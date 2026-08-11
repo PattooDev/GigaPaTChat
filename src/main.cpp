@@ -1,15 +1,24 @@
+#include <chrono>
 #include <cstdio>
 #include <csignal>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <unistd.h>
 
 #include <openssl/evp.h>
 #include <librtmp/amf.h>
 #include <librtmp/log.h>
 #include <librtmp/rtmp.h>
+
+volatile std::sig_atomic_t programme_actif = 1;
+
+void arreter_programme(int)
+{
+    programme_actif = 0;
+}
 
 std::string md5(const std::string& texte)
 {
@@ -63,6 +72,7 @@ bool attendre_challenge(
     RTMPPacket paquet = {0};
 
     while (
+        programme_actif &&
         RTMP_IsConnected(rtmp) &&
         RTMP_ReadPacket(rtmp, &paquet)
     )
@@ -186,6 +196,7 @@ bool attendre_reponse_login(RTMP* rtmp)
     RTMPPacket paquet = {0};
 
     while (
+        programme_actif &&
         RTMP_IsConnected(rtmp) &&
         RTMP_ReadPacket(rtmp, &paquet)
     )
@@ -234,37 +245,23 @@ bool attendre_reponse_login(RTMP* rtmp)
     return false;
 }
 
-int main()
+bool lire_camera(
+    int numero_camera,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    FILE* lecteur,
+    bool premier_flux
+)
 {
-    std::signal(SIGPIPE, SIG_IGN);
-
-    std::cout << "=====================================\n";
-    std::cout << "      GigaPaTChat Open Client\n";
-    std::cout << "            Version 0.9\n";
-    std::cout << "=====================================\n\n";
-
     const std::string serveur =
         "rtmp://192.168.1.114:80/";
 
     const std::string flux =
-        "ch0_1.264";
-
-    const std::string utilisateur =
-        "admin";
+        "ch" +
+        std::to_string(numero_camera) +
+        "_1.264";
 
     const std::string nonce_initial = "";
-
-    char* saisie =
-        getpass("Mot de passe du NVR : ");
-
-    if (!saisie)
-    {
-        std::cerr
-            << "Erreur : lecture du mot de passe impossible.\n";
-        return 1;
-    }
-
-    const std::string mot_de_passe = saisie;
 
     const std::string digest_initial =
         md5(nonce_initial + ":" + mot_de_passe);
@@ -283,8 +280,8 @@ int main()
     if (!rtmp)
     {
         std::cerr
-            << "Erreur : RTMP_Alloc() a échoué.\n";
-        return 1;
+            << "Erreur : allocation RTMP impossible.\n";
+        return false;
     }
 
     RTMP_Init(rtmp);
@@ -299,22 +296,21 @@ int main()
         configuration.c_str()
     );
 
-    std::cout << "Serveur : " << serveur << "\n";
-    std::cout << "Flux    : " << flux << "\n";
-    std::cout << "Compte  : " << utilisateur << "\n";
+    std::cout
+        << "\nConnexion à la caméra "
+        << numero_camera + 1
+        << "...\n";
 
     if (!RTMP_SetupURL(rtmp, url))
     {
         std::cerr
             << "Erreur : préparation RTMP impossible.\n";
         RTMP_Free(rtmp);
-        return 1;
+        return false;
     }
 
     rtmp->Link.timeout = 5;
     RTMP_SetBufferMS(rtmp, 3000);
-
-    std::cout << "Connexion initiale au NVR...\n";
 
     if (!RTMP_Connect(rtmp, nullptr))
     {
@@ -322,13 +318,10 @@ int main()
             << "Erreur : connexion RTMP impossible.\n";
         RTMP_Close(rtmp);
         RTMP_Free(rtmp);
-        return 1;
+        return false;
     }
 
     std::string challenge;
-
-    std::cout
-        << "Attente du challenge d'authentification...\n";
 
     if (!attendre_challenge(rtmp, challenge))
     {
@@ -336,10 +329,8 @@ int main()
             << "Erreur : challenge introuvable.\n";
         RTMP_Close(rtmp);
         RTMP_Free(rtmp);
-        return 1;
+        return false;
     }
-
-    std::cout << "Challenge reçu.\n";
 
     const std::string digest =
         md5(challenge + ":" + mot_de_passe);
@@ -350,75 +341,49 @@ int main()
         "&username=" + utilisateur +
         "&digest=" + digest;
 
-    std::cout
-        << "Envoi de la réponse d'authentification...\n";
-
-    if (!envoyer_login(rtmp, methode_login))
-    {
-        std::cerr
-            << "Erreur : envoi du login impossible.\n";
-        RTMP_Close(rtmp);
-        RTMP_Free(rtmp);
-        return 1;
-    }
-
-    if (!attendre_reponse_login(rtmp))
+    if (
+        !envoyer_login(rtmp, methode_login) ||
+        !attendre_reponse_login(rtmp)
+    )
     {
         std::cerr
             << "Erreur : authentification refusée.\n";
         RTMP_Close(rtmp);
         RTMP_Free(rtmp);
-        return 1;
+        return false;
     }
 
-    std::cout << "Authentification RTMP réussie.\n";
-    std::cout << "Ouverture du flux vidéo...\n";
-
-    if (!RTMP_SendCreateStream(rtmp))
-    {
-        std::cerr
-            << "Erreur : création du flux impossible.\n";
-        RTMP_Close(rtmp);
-        RTMP_Free(rtmp);
-        return 1;
-    }
-
-    if (!RTMP_ConnectStream(rtmp, 0))
+    if (
+        !RTMP_SendCreateStream(rtmp) ||
+        !RTMP_ConnectStream(rtmp, 0)
+    )
     {
         std::cerr
             << "Erreur : ouverture du flux impossible.\n";
         RTMP_Close(rtmp);
         RTMP_Free(rtmp);
-        return 1;
-    }
-
-    std::cout << "Flux vidéo ouvert avec succès.\n";
-    std::cout << "Lancement de FFplay...\n";
-
-    FILE* lecteur = popen(
-        "ffplay -loglevel warning "
-        "-fflags nobuffer "
-        "-flags low_delay "
-        "-framedrop "
-        "-i pipe:0",
-        "w"
-    );
-
-    if (!lecteur)
-    {
-        std::cerr
-            << "Erreur : lancement de FFplay impossible.\n";
-        RTMP_Close(rtmp);
-        RTMP_Free(rtmp);
-        return 1;
+        return false;
     }
 
     std::cout
-        << "Vidéo en cours. Ferme la fenêtre pour arrêter.\n";
+        << "Caméra "
+        << numero_camera + 1
+        << " en cours d'affichage.\n";
 
     char tampon_video[8192];
 
-    while (RTMP_IsConnected(rtmp))
+    std::size_t entete_a_ignorer =
+        premier_flux ? 0 : 13;
+
+    const auto debut =
+        std::chrono::steady_clock::now();
+
+    bool lecture_reussie = true;
+
+    while (
+        programme_actif &&
+        RTMP_IsConnected(rtmp)
+    )
     {
         const int octets_lus =
             RTMP_Read(
@@ -429,33 +394,148 @@ int main()
 
         if (octets_lus <= 0)
         {
+            lecture_reussie = false;
             break;
         }
 
-        const std::size_t octets_ecrits =
-            std::fwrite(
-                tampon_video,
-                1,
-                octets_lus,
-                lecteur
-            );
+        const char* donnees = tampon_video;
+        std::size_t taille =
+            static_cast<std::size_t>(octets_lus);
 
-        std::fflush(lecteur);
+        if (entete_a_ignorer > 0)
+        {
+            const std::size_t a_ignorer =
+                entete_a_ignorer < taille
+                    ? entete_a_ignorer
+                    : taille;
 
-        if (
-            octets_ecrits !=
-            static_cast<std::size_t>(octets_lus)
-        )
+            donnees += a_ignorer;
+            taille -= a_ignorer;
+            entete_a_ignorer -= a_ignorer;
+        }
+
+        if (taille > 0)
+        {
+            const std::size_t octets_ecrits =
+                std::fwrite(
+                    donnees,
+                    1,
+                    taille,
+                    lecteur
+                );
+
+            const int vidage =
+                std::fflush(lecteur);
+
+            if (
+                octets_ecrits != taille ||
+                vidage == EOF
+            )
+            {
+                programme_actif = 0;
+                lecture_reussie = false;
+                break;
+            }
+        }
+
+        const auto maintenant =
+            std::chrono::steady_clock::now();
+
+        const auto secondes =
+            std::chrono::duration_cast<
+                std::chrono::seconds
+            >(maintenant - debut).count();
+
+        if (secondes >= 15)
         {
             break;
         }
     }
 
-    pclose(lecteur);
-
     RTMP_Close(rtmp);
     RTMP_Free(rtmp);
 
-    std::cout << "Lecture terminée.\n";
+    return lecture_reussie;
+}
+
+int main()
+{
+    std::signal(SIGPIPE, SIG_IGN);
+    std::signal(SIGINT, arreter_programme);
+
+    std::cout << "=====================================\n";
+    std::cout << "      GigaPaTChat Open Client\n";
+    std::cout << "            Version 1.1\n";
+    std::cout << "=====================================\n\n";
+
+    const std::string utilisateur = "admin";
+
+    char* saisie =
+        getpass("Mot de passe du NVR : ");
+
+    if (!saisie)
+    {
+        std::cerr
+            << "Erreur : lecture du mot de passe impossible.\n";
+        return 1;
+    }
+
+    const std::string mot_de_passe = saisie;
+
+    FILE* lecteur = popen(
+        "ffplay -loglevel warning "
+        "-fflags nobuffer "
+        "-flags low_delay "
+        "-framedrop "
+        "-window_title \"GigaPaTChat\" "
+        "-i pipe:0",
+        "w"
+    );
+
+    if (!lecteur)
+    {
+        std::cerr
+            << "Erreur : lancement de FFplay impossible.\n";
+        return 1;
+    }
+
+    std::cout
+        << "Alternance automatique des deux caméras.\n";
+    std::cout
+        << "La fenêtre vidéo restera ouverte.\n";
+    std::cout
+        << "Appuie sur Ctrl+C pour arrêter.\n";
+
+    int numero_camera = 0;
+    bool premier_flux = true;
+
+    while (programme_actif)
+    {
+        if (
+            !lire_camera(
+                numero_camera,
+                utilisateur,
+                mot_de_passe,
+                lecteur,
+                premier_flux
+            )
+        )
+        {
+            break;
+        }
+
+        premier_flux = false;
+
+        std::this_thread::sleep_for(
+            std::chrono::seconds(2)
+        );
+
+        numero_camera =
+            numero_camera == 0 ? 1 : 0;
+    }
+
+    pclose(lecteur);
+
+    std::cout << "\nGigaPaTChat arrêté.\n";
     return 0;
 }
