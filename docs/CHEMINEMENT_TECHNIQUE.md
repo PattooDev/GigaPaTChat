@@ -16,7 +16,7 @@ Environnement principal de développement :
 
 - Deepin 25 ;
 - C++17 et CMake ;
-- NVR à l’adresse `192.168.1.114` ;
+- NVR à l’adresse privée `<IP_DU_NVR>` ;
 - serveur vidéo accessible sur le port TCP 80 ;
 - deux caméras utilisées pendant les essais.
 
@@ -145,6 +145,13 @@ NVR RTMP:80
 - conservation du mot de passe uniquement pendant l’exécution ;
 - validation visuelle du flux secondaire le 21 août 2026.
 
+### Version 1.5.1
+
+- suppression de l’adresse personnelle du NVR dans le code public ;
+- saisie de l’adresse et du nom d’utilisateur au lancement ;
+- conservation de ces informations uniquement pendant l’exécution ;
+- anonymisation des adresses du réseau de développement dans la documentation.
+
 ## 8. Flux principal et flux secondaire
 
 Le client Web indique la correspondance suivante :
@@ -170,19 +177,19 @@ essais réels, et non une confusion entre les deux flux.
 
 ## 9. Essai d’accès direct à la caméra
 
-Une voie expérimentale a utilisé l’adresse interne `172.20.14.30` et le nom de
-flux `360p.264`. Une route vers le réseau `172.20.14.0/24` via le NVR a été
+Une voie expérimentale a utilisé l’adresse `<IP_INTERNE_CAMERA>` et le nom de
+flux `360p.264`. Une route vers le réseau interne des caméras via le NVR a été
 testée. Cet accès direct s’est toutefois montré dépendant de l’état du routage
 interne et n’a pas été retenu comme configuration stable.
 
 La version validée revient donc au serveur RTMP du NVR :
 
 ```text
-rtmp://192.168.1.114:80/
+rtmp://<IP_DU_NVR>:80/
 ```
 
-L’adresse `172.20.14.30` ne doit pas être considérée comme universelle : elle
-appartient uniquement au réseau interne observé pendant le développement.
+`<IP_INTERNE_CAMERA>` désigne uniquement une adresse privée observée pendant
+le développement ; elle n’est ni universelle ni nécessaire à la version stable.
 
 ## 10. Enregistrement vidéo
 
@@ -208,7 +215,7 @@ Les messages RTMP permettent de localiser rapidement une panne :
 Pour l’appareil de développement, la base connue comme fonctionnelle est :
 
 ```text
-NVR       : 192.168.1.114:80
+NVR       : <IP_DU_NVR>:80
 Caméra 1  : ch0_1.264
 Caméra 2  : ch1_1.264
 ```
