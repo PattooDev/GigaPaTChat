@@ -1,0 +1,3 @@
+[submodule "rtmpdump-source"]
+	path = rtmpdump-source
+	url = https://github.com/mstorsjo/rtmpdump.git
