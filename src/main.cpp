@@ -521,6 +521,7 @@ int lire_rtmp_ffmpeg(
 
 bool lire_camera(
     int numero_camera,
+    const std::string& adresse_nvr,
     const std::string& utilisateur,
     const std::string& mot_de_passe,
     SDL_Window* fenetre,
@@ -529,7 +530,7 @@ bool lire_camera(
 )
 {
     const std::string serveur =
-        "rtmp://192.168.1.114:80/";
+        "rtmp://" + adresse_nvr + ":80/";
 
     const std::string flux =
         "ch" + std::to_string(numero_camera) + "_1.264";
@@ -1158,11 +1159,40 @@ int main()
     std::cout
         << "=====================================\n"
         << "      GigaPaTChat Open Client\n"
-        << "            Version 1.5\n"
+        << "           Version 1.5.1\n"
         << "=====================================\n\n";
 
-    const std::string utilisateur =
-        "admin";
+    std::string adresse_nvr;
+
+    std::cout
+        << "Adresse IP ou nom du NVR : ";
+
+    if (
+        !std::getline(std::cin, adresse_nvr) ||
+        adresse_nvr.empty()
+    )
+    {
+        std::cerr
+            << "Erreur : adresse du NVR manquante.\n";
+
+        return 1;
+    }
+
+    std::string utilisateur;
+
+    std::cout
+        << "Nom d'utilisateur du NVR : ";
+
+    if (
+        !std::getline(std::cin, utilisateur) ||
+        utilisateur.empty()
+    )
+    {
+        std::cerr
+            << "Erreur : nom d'utilisateur manquant.\n";
+
+        return 1;
+    }
 
     char* saisie =
         getpass(
@@ -1252,6 +1282,7 @@ int main()
         const bool succes =
             lire_camera(
                 camera_actuelle,
+                adresse_nvr,
                 utilisateur,
                 mot_de_passe,
                 fenetre,

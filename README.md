@@ -9,7 +9,7 @@ navigateur et sans greffon propriétaire obsolète.
 
 ## État du projet
 
-Version actuelle validée : **1.5.0** — 21 août 2026.
+Version actuelle validée : **1.5.1** — 21 août 2026.
 
 Cette version sait :
 
@@ -77,20 +77,21 @@ cmake -S . -B build
 cmake --build build -j"$(nproc)"
 ```
 
-## Configuration actuelle
+## Configuration
 
-Dans la version 1.5, l’adresse du NVR est encore définie dans
-`src/main.cpp` :
+L’adresse du NVR, le nom d’utilisateur et le mot de passe sont demandés au
+lancement. Ils ne sont pas enregistrés dans le dépôt :
 
 ```text
-rtmp://192.168.1.114:80/
+Adresse IP ou nom du NVR : <IP_DU_NVR>
+Nom d'utilisateur du NVR : <UTILISATEUR_DU_NVR>
+Mot de passe du NVR :
 ```
 
-Adaptez cette adresse à votre réseau avant de compiler. Le nom des flux est
-construit sous la forme `ch<numero>_1.264`.
-
-Le nom d’utilisateur actuellement utilisé est `admin`. Le mot de passe est
-demandé dans le terminal à chaque lancement.
+`<IP_DU_NVR>` est un emplacement à remplacer par l’adresse privée réelle du
+NVR, sans `http://` ni `rtmp://`. Le port RTMP reste fixé à 80 dans cette
+version. Le nom des flux est construit sous la forme
+`ch<numero>_1.264`.
 
 ## Lancement
 
@@ -124,7 +125,7 @@ La version 1.5 utilise donc volontairement `_1.264` comme base fiable.
 
 ## Limites connues
 
-- adresse du NVR et utilisateur encore codés dans la source ;
+- port RTMP encore fixé à 80 dans la source ;
 - deux caméras seulement dans l’interface actuelle ;
 - journal RTMP encore très détaillé ;
 - enregistrement vidéo à stabiliser ;
