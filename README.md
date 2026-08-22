@@ -25,6 +25,32 @@ Cette version sait :
 L’enregistrement est présent dans le prototype, mais reste **expérimental** :
 la gestion des horodatages doit encore être fiabilisée.
 
+## Validation mobile EseeCloud — 22 août 2026
+
+En complément du client Linux, le NVR de développement a été ajouté avec succès
+à l’application Android **EseeCloud** au moyen du QR code / identifiant
+**Cloud P2P** présent sur l’étiquette de l’appareil.
+
+Les essais ont confirmé :
+
+- l’ajout du NVR dans EseeCloud ;
+- l’affichage correct des flux des caméras 1 et 2 ;
+- l’affichage `NO VIDEO` sur les canaux non utilisés ;
+- le fonctionnement sur le réseau Wi-Fi local ;
+- le fonctionnement hors Wi-Fi, en données mobiles 5G ;
+- qu’après un premier affichage « hors ligne » en 5G, une fermeture complète
+  puis une relance d’EseeCloud permet au NVR de revenir en ligne et d’afficher
+  les flux.
+
+Cette validation confirme que l’écosystème **NVR / EseeCloud / Cloud P2P** du
+matériel testé fonctionne encore sur Android. Elle est indépendante du chemin
+RTMP local utilisé par GigaPaTChat, mais elle fournit une référence utile pour
+comparer le comportement du NVR et préparer de futurs travaux sur l’accès
+mobile.
+
+Aucun QR code, identifiant P2P ni identifiant privé du matériel n’est publié
+dans ce dépôt.
+
 ## Matériel et compatibilité
 
 Le développement a été réalisé avec un NVR Gigamedia dont l’interface HTTP
@@ -138,7 +164,12 @@ L’authentification MD5 reproduit le fonctionnement du matériel ancien ; elle
 ne constitue pas une protection moderne. Utilisez GigaPaTChat uniquement sur
 un réseau local de confiance et n’exposez pas directement le NVR à Internet.
 
-Aucun mot de passe réel ne doit être ajouté au dépôt Git.
+Le fonctionnement Cloud P2P observé avec EseeCloud ne modifie pas cette
+recommandation : il ne faut pas ouvrir manuellement le port RTMP du NVR vers
+Internet pour reproduire cet accès.
+
+Aucun mot de passe réel, QR code ou identifiant P2P ne doit être ajouté au dépôt
+Git.
 
 ## Documentation technique
 
