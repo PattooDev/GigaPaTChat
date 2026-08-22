@@ -201,7 +201,36 @@ que la reconstruction des horodatages n’est pas totalement validée.
 Cette limite doit rester clairement indiquée : l’affichage est stable, mais
 l’enregistrement n’est pas encore une fonction garantie de la version 1.5.
 
-## 11. Diagnostic rapide
+## 11. Validation Android EseeCloud / Cloud P2P — 22 août 2026
+
+Une série d’essais complémentaires a été menée sur Android avec l’application
+**EseeCloud**, non pas pour remplacer GigaPaTChat, mais pour comprendre une autre
+voie d’accès au même NVR.
+
+Le NVR a été ajouté dans EseeCloud à l’aide du QR code / identifiant **Cloud
+P2P** figurant sur l’étiquette du matériel. L’ajout a réussi et les flux des
+caméras 1 et 2 se sont affichés correctement. Les autres canaux, non utilisés,
+affichent `NO VIDEO`.
+
+Un second essai a été effectué hors du Wi-Fi local : Wi-Fi désactivé sur le
+téléphone, connexion en données mobiles 5G. EseeCloud a d’abord indiqué le NVR
+comme hors ligne. Après fermeture complète de l’application puis relance, le
+NVR est revenu en ligne et les flux vidéo ont été accessibles en 5G.
+
+Ces résultats établissent plusieurs points utiles :
+
+- le service Cloud P2P du NVR est encore opérationnel ;
+- le matériel peut être atteint depuis l’extérieur sans exposition manuelle du
+  port RTMP local ;
+- le chemin EseeCloud/P2P est distinct du chemin RTMP local utilisé par
+  GigaPaTChat ;
+- cette voie fournit un point de comparaison précieux pour de futures recherches
+  sur l’accès distant.
+
+Aucun QR code, identifiant Cloud P2P ou identifiant privé du NVR n’est conservé
+dans cette documentation publique.
+
+## 12. Diagnostic rapide
 
 Les messages RTMP permettent de localiser rapidement une panne :
 
@@ -220,21 +249,25 @@ Caméra 1  : ch0_1.264
 Caméra 2  : ch1_1.264
 ```
 
-## 12. Sécurité
+## 13. Sécurité
 
 Le protocole reproduit une authentification ancienne fondée sur MD5. Même si
 le mot de passe n’est ni écrit dans la source ni conservé par GigaPaTChat, ce
 protocole ne doit pas être exposé directement à Internet.
 
+Le fonctionnement observé via EseeCloud et Cloud P2P ne justifie pas d’ouvrir
+manuellement le port RTMP du NVR sur Internet. Ces deux chemins doivent rester
+considérés comme techniquement distincts.
+
 Recommandations :
 
 - utiliser un réseau local de confiance ;
 - protéger le NVR derrière un pare-feu ;
-- ne jamais publier de mot de passe ou de digest de test ;
+- ne jamais publier de mot de passe, digest de test, QR code ou identifiant P2P ;
 - changer les identifiants utilisés pendant une campagne de diagnostic si
   nécessaire.
 
-## 13. Suite prévue
+## 14. Suite prévue
 
 Les prochaines améliorations peuvent maintenant être réalisées sans perdre la
 base stable :
@@ -245,9 +278,11 @@ base stable :
 3. fiabiliser les horodatages de l’enregistrement ;
 4. étudier la coupure du flux principal sans dégrader le flux stable ;
 5. améliorer l’interface et gérer davantage de caméras ;
-6. préparer une installation plus simple pour Deepin et Debian.
+6. documenter davantage les différences entre accès local RTMP et accès distant
+   Cloud P2P sans exposer d’identifiants privés ;
+7. préparer une installation plus simple pour Deepin et Debian.
 
-## 14. Principe de travail
+## 15. Principe de travail
 
 Chaque étape fonctionnelle est sauvegardée avant l’expérience suivante. Les
 changements sont testés sur le NVR réel, puis seulement validés dans Git lorsque
