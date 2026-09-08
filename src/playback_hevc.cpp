@@ -240,7 +240,7 @@ bool afficher_image(
         )
         {
             std::cerr
-                << "Erreur : préparation affichage SDL HEVC impossible.\\n";
+                << "Erreur : préparation affichage SDL HEVC impossible.\n";
 
             return false;
         }

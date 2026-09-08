@@ -1067,6 +1067,7 @@ bool afficher_ecran_archives(
             );
 
         bool quitter_apres_recherche = false;
+        bool fermeture_demandee = false;
 
         while (
             futur.wait_for(
@@ -1079,7 +1080,11 @@ bool afficher_ecran_archives(
             while (SDL_PollEvent(&attente))
             {
                 if (attente.type == SDL_QUIT)
+                {
+                    fermeture_demandee = true;
                     quitter_apres_recherche = true;
+                } 
+                 
 
                 if (
                     attente.type == SDL_KEYDOWN &&
@@ -1097,7 +1102,7 @@ bool afficher_ecran_archives(
             futur.get();
 
         if (quitter_apres_recherche)
-            return true;
+        return !fermeture_demandee;
 
         if (!succes)
         {
