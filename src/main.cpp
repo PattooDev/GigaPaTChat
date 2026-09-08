@@ -10,6 +10,9 @@
 #include <string>
 #include <unistd.h>
 
+#include "playback.h"
+#include "ui.h"
+
 #include <SDL2/SDL.h>
 
 extern "C"
@@ -27,6 +30,7 @@ extern "C"
 #include <librtmp/rtmp.h>
 
 volatile std::sig_atomic_t programme_actif = 1;
+bool lecture_nvr_demandee = false;
 
 void arreter_programme(int)
 {
@@ -532,8 +536,21 @@ bool lire_camera(
     const std::string serveur =
         "rtmp://" + adresse_nvr + ":80/";
 
+    const char* profil_env = std::getenv("GIGAPATCHAT_STREAM");
+
+    const std::string profil =
+        (profil_env && std::string(profil_env) == "0")
+        ? "0"
+        : "1";
+
     const std::string flux =
-        "ch" + std::to_string(numero_camera) + "_1.264";
+        "ch" + std::to_string(numero_camera) +
+        "_" + profil + ".264";
+
+    std::cerr
+        << "[RTMP] Flux demandé : "
+        << flux
+        << "\n";
 
     const std::string nonce_initial = "";
 
@@ -591,9 +608,17 @@ bool lire_camera(
 
     rtmp->Link.timeout = 30;
 
+    const int buffer_rtmp_ms =
+        (profil == "0") ? 200 : 1000;
+
+    std::cerr
+        << "[RTMP] Buffer demandé : "
+        << buffer_rtmp_ms
+        << " ms\n";
+
     RTMP_SetBufferMS(
         rtmp,
-        1000
+        buffer_rtmp_ms
     );
 
     if (!RTMP_Connect(rtmp, nullptr))
@@ -867,6 +892,27 @@ bool lire_camera(
     bool enregistrement_demande = false;
     Enregistrement enregistrement;
 
+    auto basculer_enregistrement = [&]()
+    {
+        if (
+            enregistrement.format ||
+            enregistrement_demande
+        )
+        {
+            enregistrement_demande = false;
+            arreter_enregistrement(
+                enregistrement
+            );
+        }
+        else
+        {
+            enregistrement_demande = true;
+
+            std::cout
+                << "Démarrage demandé : attente d'une image clé...\n";
+        }
+    };
+
     while (
         programme_actif &&
         camera_demandee == numero_camera
@@ -876,59 +922,35 @@ bool lire_camera(
 
         while (SDL_PollEvent(&evenement))
         {
-            if (evenement.type == SDL_QUIT)
+            const CommandeInterface commande =
+                commande_interface(
+                    evenement,
+                    fenetre
+                );
+
+            if (commande == CommandeInterface::Camera1)
+            {
+                camera_demandee = 0;
+            }
+            else if (commande == CommandeInterface::Camera2)
+            {
+                camera_demandee = 1;
+            }
+            else if (commande == CommandeInterface::Enregistrement)
+            {
+                basculer_enregistrement();
+            }
+            else if (commande == CommandeInterface::Lecture)
+            {
+                lecture_nvr_demandee = true;
+                camera_demandee = -1;
+
+                std::cout
+                    << "Ouverture de la lecture NVR...\n";
+            }
+            else if (commande == CommandeInterface::Quitter)
             {
                 programme_actif = 0;
-            }
-            else if (
-                evenement.type ==
-                SDL_KEYDOWN
-            )
-            {
-                if (
-                    evenement.key.keysym.sym ==
-                    SDLK_ESCAPE
-                )
-                {
-                    programme_actif = 0;
-                }
-                else if (
-                    evenement.key.keysym.sym ==
-                    SDLK_1
-                )
-                {
-                    camera_demandee = 0;
-                }
-                else if (
-                    evenement.key.keysym.sym ==
-                    SDLK_2
-                )
-                {
-                    camera_demandee = 1;
-                }
-                else if (
-                    evenement.key.keysym.sym ==
-                    SDLK_r
-                )
-                {
-                    if (
-                        enregistrement.format ||
-                        enregistrement_demande
-                    )
-                    {
-                        enregistrement_demande = false;
-                        arreter_enregistrement(
-                            enregistrement
-                        );
-                    }
-                    else
-                    {
-                        enregistrement_demande = true;
-
-                        std::cout
-                            << "Démarrage demandé : attente d'une image clé...\n";
-                    }
-                }
             }
         }
 
@@ -1067,7 +1089,7 @@ std::cout << "Résolution reçue : " << largeur << "x" << hauteur << std::endl;
                             32
                         );
 
-                        SDL_SetWindowSize(
+                        ajuster_fenetre_video(
                             fenetre,
                             largeur,
                             hauteur
@@ -1108,13 +1130,42 @@ std::cout << "Résolution reçue : " << largeur << "x" << hauteur << std::endl;
                         image_yuv->linesize[2]
                     );
 
+                    SDL_SetRenderDrawColor(
+                        rendu,
+                        0,
+                        0,
+                        0,
+                        255
+                    );
+
                     SDL_RenderClear(rendu);
+
+                    const SDL_Rect destination =
+                        zone_video(
+                            fenetre,
+                            largeur,
+                            hauteur
+                        );
 
                     SDL_RenderCopy(
                         rendu,
                         texture,
                         nullptr,
-                        nullptr
+                        &destination
+                    );
+
+                    EtatInterface etat;
+                    etat.camera = numero_camera;
+                    etat.camera_disponible = true;
+                    etat.enregistrement =
+                        enregistrement.format ||
+                        enregistrement_demande;
+                    etat.lecture_autorisee = true;
+
+                    dessiner_interface(
+                        rendu,
+                        fenetre,
+                        etat
                     );
 
                     SDL_RenderPresent(rendu);
@@ -1159,7 +1210,7 @@ int main()
     std::cout
         << "=====================================\n"
         << "      GigaPaTChat Open Client\n"
-        << "           Version 1.5.1\n"
+        << "           Version 1.6.1\n"
         << "=====================================\n\n";
 
     std::string adresse_nvr;
@@ -1233,7 +1284,7 @@ int main()
             SDL_WINDOWPOS_CENTERED,
             SDL_WINDOWPOS_CENTERED,
             960,
-            540,
+            620,
             SDL_WINDOW_RESIZABLE
         );
 
@@ -1265,17 +1316,80 @@ int main()
         return 1;
     }
 
+    if (!initialiser_interface())
+    {
+        std::cerr
+            << "Erreur : initialisation de l'interface SDL2_ttf impossible.\n";
+
+        SDL_DestroyRenderer(rendu);
+        SDL_DestroyWindow(fenetre);
+        SDL_Quit();
+
+        return 1;
+    }
+
     std::cout
         << "Fenêtre vidéo native SDL2 active.\n"
         << "Touche 1 : caméra 1\n"
         << "Touche 2 : caméra 2\n"
         << "Touche R : démarrer/arrêter l'enregistrement\n"
+        << "Touche P : rechercher et lire les archives du NVR\n"
+        << "Souris : boutons Caméra 1 / Caméra 2 / Enregistrer / Lecture NVR / Quitter\n"
         << "Échap : quitter\n";
 
-    int camera_demandee = 0;
+    int camera_demandee = -1;
+    std::string message_interface =
+        "Prêt - choisissez une caméra ou Lecture NVR";
 
     while (programme_actif)
     {
+        if (camera_demandee < 0)
+        {
+            const CommandeInterface commande =
+                attendre_commande_interface(
+                    rendu,
+                    fenetre,
+                    0,
+                    message_interface,
+                    true
+                );
+
+            if (commande == CommandeInterface::Camera1)
+            {
+                camera_demandee = 0;
+                message_interface = "Connexion caméra 1...";
+            }
+            else if (commande == CommandeInterface::Camera2)
+            {
+                camera_demandee = 1;
+                message_interface = "Connexion caméra 2...";
+            }
+            else if (commande == CommandeInterface::Lecture)
+            {
+                if (
+                    !afficher_ecran_archives(
+                        rendu,
+                        fenetre,
+                        adresse_nvr,
+                        utilisateur,
+                        mot_de_passe
+                    )
+                )
+                {
+                    programme_actif = 0;
+                }
+
+                message_interface =
+                    "Retour des archives NVR - choisissez une caméra";
+            }
+            else if (commande == CommandeInterface::Quitter)
+            {
+                programme_actif = 0;
+            }
+
+            continue;
+        }
+
         const int camera_actuelle =
             camera_demandee;
 
@@ -1290,23 +1404,45 @@ int main()
                 camera_demandee
             );
 
-        if (
-            !programme_actif
-        )
+        if (lecture_nvr_demandee)
         {
-            break;
+            lecture_nvr_demandee = false;
+            camera_demandee = -1;
+
+            if (
+                !afficher_ecran_archives(
+                        rendu,
+                        fenetre,
+                        adresse_nvr,
+                        utilisateur,
+                        mot_de_passe
+                    )
+            )
+            {
+                programme_actif = 0;
+            }
+
+            message_interface =
+                "Retour des archives NVR - choisissez une caméra";
+
+            continue;
         }
+
+        if (!programme_actif)
+            break;
 
         if (
             !succes &&
-            camera_demandee ==
-                camera_actuelle
+            camera_demandee == camera_actuelle
         )
         {
-            break;
+            camera_demandee = -1;
+            message_interface =
+                "Caméra indisponible - connexion ou authentification refusée";
         }
     }
 
+    fermer_interface();
     SDL_DestroyRenderer(rendu);
     SDL_DestroyWindow(fenetre);
     SDL_Quit();
