@@ -247,8 +247,8 @@ std::string chemin_enregistrement(int numero_camera)
 
     std::filesystem::path dossier =
         dossier_personnel
-            ? std::filesystem::path(dossier_personnel) / "Videos"
-            : std::filesystem::path(".");
+            ? std::filesystem::path(dossier_personnel) / "Videos" / "GigaPaTChat"
+            : std::filesystem::path(".") / "GigaPaTChat";
 
     std::error_code erreur;
     std::filesystem::create_directories(
