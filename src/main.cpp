@@ -1273,6 +1273,78 @@ int main()
         const std::string mot_de_passe_find =
             saisie_find;
 
+        std::time_t maintenant_find =
+            std::time(nullptr);
+
+        std::tm locale_find = {};
+        localtime_r(
+            &maintenant_find,
+            &locale_find
+        );
+
+        char date_find[32] = {};
+
+        std::strftime(
+            date_find,
+            sizeof(date_find),
+            "%Y-%m-%d",
+            &locale_find
+        );
+
+        std::vector<SessionNVR> sessions_find;
+        int total_http_find = 0;
+
+        const bool http_find_ok =
+            rechercher_archives_nvr(
+                adresse_nvr,
+                utilisateur_find,
+                mot_de_passe_find,
+                3,
+                15,
+                date_find,
+                "00:00:00",
+                "23:59:59",
+                sessions_find,
+                total_http_find
+            );
+
+        int canal_find = 0;
+        int type_find = 15;
+        std::int64_t debut_find = 0;
+        std::int64_t fin_find = 0;
+
+        if (
+            http_find_ok &&
+            !sessions_find.empty()
+        )
+        {
+            const SessionNVR& reference =
+                sessions_find.front();
+
+            canal_find = reference.canal;
+            type_find = reference.type;
+            debut_find = reference.debut;
+            fin_find = reference.fin;
+
+            std::cout
+                << "\n[HTTP] Référence réelle choisie pour comparaison KP2P :\n"
+                << "[HTTP] caméra "
+                << reference.canal + 1
+                << " | type "
+                << reference.type
+                << " | début="
+                << reference.debut
+                << " | fin="
+                << reference.fin
+                << "\n";
+        }
+        else
+        {
+            std::cout
+                << "\n[HTTP] Aucune référence précise disponible ; "
+                << "recherche KP2P large utilisée.\n";
+        }
+
         std::cout
             << "\n[EseeCloud] Recherche REPLAY native KP2P expérimentale...\n";
 
@@ -1281,10 +1353,12 @@ int main()
                 adresse_nvr,
                 utilisateur_find,
                 mot_de_passe_find,
-                0,
-                15,
+                canal_find,
+                type_find,
                 10000,
-                3000
+                3000,
+                debut_find,
+                fin_find
             );
 
         std::cout
