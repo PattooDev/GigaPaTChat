@@ -3252,6 +3252,152 @@ ResultatReplayEsee tester_replay_start_esee(
     resultat.auth = true;
     resultat.detail.clear();
 
+    std::vector<std::uint8_t> recherche(
+        52,
+        0
+    );
+
+    auto ecrire_u32_recherche = [&recherche](
+        std::size_t offset,
+        std::uint32_t valeur
+    )
+    {
+        recherche[offset + 0] =
+            static_cast<std::uint8_t>(
+                valeur & 0xFF
+            );
+        recherche[offset + 1] =
+            static_cast<std::uint8_t>(
+                (valeur >> 8) & 0xFF
+            );
+        recherche[offset + 2] =
+            static_cast<std::uint8_t>(
+                (valeur >> 16) & 0xFF
+            );
+        recherche[offset + 3] =
+            static_cast<std::uint8_t>(
+                (valeur >> 24) & 0xFF
+            );
+    };
+
+    ecrire_u32_recherche(0, 1);
+    ecrire_u32_recherche(4, 0);
+
+    if (canal > 0 && canal < 128)
+    {
+        const std::size_t octet =
+            8 +
+            static_cast<std::size_t>(
+                canal / 8
+            );
+
+        if (octet < 24)
+        {
+            recherche[octet] |=
+                static_cast<std::uint8_t>(
+                    1U << (canal % 8)
+                );
+        }
+    }
+
+    ecrire_u32_recherche(
+        24,
+        static_cast<std::uint32_t>(
+            type
+        )
+    );
+    ecrire_u32_recherche(28, 0);
+    ecrire_u32_recherche(
+        32,
+        static_cast<std::uint32_t>(
+            debut_epoch
+        )
+    );
+    ecrire_u32_recherche(
+        36,
+        static_cast<std::uint32_t>(
+            fin_epoch
+        )
+    );
+    ecrire_u32_recherche(40, 0);
+    ecrire_u32_recherche(44, 0);
+    ecrire_u32_recherche(48, 100);
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            2,
+            40,
+            recherche,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "AUTH OK, échec envoi REPLAY SEARCH préalable";
+        close(fd);
+        return resultat;
+    }
+
+    payload_api.clear();
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            payload_api,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "AUTH OK, aucune réponse REPLAY SEARCH préalable";
+        close(fd);
+        return resultat;
+    }
+
+    if (
+        commande_api != 41 ||
+        resultat_api != 0 ||
+        payload_api.size() < 52 ||
+        lire_u32_le(
+            payload_api.data()
+        ) != 1
+    )
+    {
+        std::ostringstream detail;
+        detail
+            << "REPLAY SEARCH préalable refusé ou inattendu : cmd="
+            << commande_api
+            << " code="
+            << resultat_api;
+
+        resultat.detail =
+            detail.str();
+
+        close(fd);
+        return resultat;
+    }
+
+    const std::uint32_t total_recherche =
+        lire_u32_le(
+            payload_api.data() + 48
+        );
+
+    if (total_recherche == 0)
+    {
+        resultat.detail =
+            "REPLAY SEARCH préalable accepté mais aucune archive trouvée";
+        close(fd);
+        return resultat;
+    }
+
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(300)
+    );
+
     std::vector<std::uint8_t> replay(
         52,
         0
@@ -3327,7 +3473,7 @@ ResultatReplayEsee tester_replay_start_esee(
         !envoyer_api(
             fd,
             sid,
-            2,
+            3,
             40,
             replay,
             timeout_ms
@@ -3607,7 +3753,7 @@ ResultatReplayEsee tester_replay_start_esee(
         (void)envoyer_api(
             fd,
             sid,
-            3,
+            4,
             40,
             stop,
             1000
