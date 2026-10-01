@@ -2012,6 +2012,431 @@ ResultatAuthEsee tester_auth3_esee(
 }
 
 
+
+ResultatRechercheEsee tester_recherche_replay_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int canal,
+    int type,
+    int port,
+    int timeout_ms
+)
+{
+    ResultatRechercheEsee resultat;
+    resultat.code = -1;
+
+    if (
+        adresse_nvr.empty() ||
+        utilisateur.empty() ||
+        canal < 0 ||
+        type < 0 ||
+        port <= 0 ||
+        port > 65535
+    )
+    {
+        resultat.detail = "paramètres invalides";
+        return resultat;
+    }
+
+    if (
+        utilisateur.size() >= 32 ||
+        mot_de_passe.size() >= 32
+    )
+    {
+        resultat.detail =
+            "identifiants trop longs pour KP2P";
+        return resultat;
+    }
+
+    if (timeout_ms <= 0)
+        timeout_ms = 3000;
+
+    std::uint32_t sid = 0;
+
+    const int fd =
+        ouvrir_websocket_arq(
+            adresse_nvr,
+            port,
+            timeout_ms,
+            resultat.websocket,
+            resultat.arq,
+            sid,
+            resultat.detail
+        );
+
+    if (fd < 0)
+        return resultat;
+
+    if (
+        !ouvrir_iot_sur_fd(
+            fd,
+            sid,
+            timeout_ms,
+            resultat.detail
+        )
+    )
+    {
+        close(fd);
+        return resultat;
+    }
+
+    resultat.iot = true;
+
+    std::vector<std::uint8_t> utilisateur_chiffre;
+    std::vector<std::uint8_t> mot_de_passe_chiffre;
+
+    if (
+        !chiffrer_champ_auth(
+            utilisateur,
+            utilisateur_chiffre
+        ) ||
+        !chiffrer_champ_auth(
+            mot_de_passe,
+            mot_de_passe_chiffre
+        )
+    )
+    {
+        resultat.detail =
+            "échec du chiffrement des identifiants";
+        close(fd);
+        return resultat;
+    }
+
+    std::vector<std::uint8_t> auth_payload;
+    auth_payload.reserve(64);
+    auth_payload.insert(
+        auth_payload.end(),
+        utilisateur_chiffre.begin(),
+        utilisateur_chiffre.end()
+    );
+    auth_payload.insert(
+        auth_payload.end(),
+        mot_de_passe_chiffre.begin(),
+        mot_de_passe_chiffre.end()
+    );
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            1,
+            10,
+            auth_payload,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "échec envoi API_AUTH_REQ";
+        close(fd);
+        return resultat;
+    }
+
+    std::uint32_t commande_api = 0;
+    std::int32_t resultat_api = -1;
+    std::vector<std::uint8_t> payload_api;
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            payload_api,
+            timeout_ms
+        ) ||
+        commande_api != 11 ||
+        resultat_api != 0
+    )
+    {
+        resultat.code = resultat_api;
+        resultat.detail =
+            "authentification KP2P refusée avant recherche REPLAY";
+        close(fd);
+        return resultat;
+    }
+
+    resultat.auth = true;
+
+    const std::time_t maintenant =
+        std::time(nullptr);
+
+    std::tm debut_tm = {};
+    localtime_r(
+        &maintenant,
+        &debut_tm
+    );
+
+    debut_tm.tm_hour = 0;
+    debut_tm.tm_min = 0;
+    debut_tm.tm_sec = 0;
+    debut_tm.tm_isdst = -1;
+
+    std::tm fin_tm = debut_tm;
+    fin_tm.tm_hour = 23;
+    fin_tm.tm_min = 59;
+    fin_tm.tm_sec = 59;
+
+    const std::time_t debut_t =
+        std::mktime(&debut_tm);
+
+    const std::time_t fin_t =
+        std::mktime(&fin_tm);
+
+    if (
+        debut_t == static_cast<std::time_t>(-1) ||
+        fin_t == static_cast<std::time_t>(-1)
+    )
+    {
+        resultat.detail =
+            "impossible de calculer l'intervalle de recherche";
+        close(fd);
+        return resultat;
+    }
+
+    std::vector<std::uint8_t> recherche(
+        52,
+        0
+    );
+
+    auto ecrire_u32 = [&recherche](
+        std::size_t offset,
+        std::uint32_t valeur
+    )
+    {
+        recherche[offset + 0] =
+            static_cast<std::uint8_t>(
+                valeur & 0xFF
+            );
+        recherche[offset + 1] =
+            static_cast<std::uint8_t>(
+                (valeur >> 8) & 0xFF
+            );
+        recherche[offset + 2] =
+            static_cast<std::uint8_t>(
+                (valeur >> 16) & 0xFF
+            );
+        recherche[offset + 3] =
+            static_cast<std::uint8_t>(
+                (valeur >> 24) & 0xFF
+            );
+    };
+
+    ecrire_u32(0, 1);
+    ecrire_u32(4, 0);
+
+    if (canal > 0 && canal < 128)
+    {
+        const std::size_t octet =
+            8 +
+            static_cast<std::size_t>(
+                canal / 8
+            );
+
+        if (octet < 24)
+        {
+            recherche[octet] |=
+                static_cast<std::uint8_t>(
+                    1U << (canal % 8)
+                );
+        }
+    }
+
+    ecrire_u32(
+        24,
+        static_cast<std::uint32_t>(type)
+    );
+    ecrire_u32(28, 0);
+    ecrire_u32(
+        32,
+        static_cast<std::uint32_t>(debut_t)
+    );
+    ecrire_u32(
+        36,
+        static_cast<std::uint32_t>(fin_t)
+    );
+    ecrire_u32(40, 0);
+    ecrire_u32(44, 0);
+    ecrire_u32(48, 10);
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            2,
+            40,
+            recherche,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "AUTH OK, échec envoi REPLAY SEARCH";
+        close(fd);
+        return resultat;
+    }
+
+    payload_api.clear();
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            payload_api,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "AUTH OK, aucune réponse REPLAY SEARCH";
+        close(fd);
+        return resultat;
+    }
+
+    resultat.code = resultat_api;
+
+    if (
+        commande_api != 41 ||
+        resultat_api != 0
+    )
+    {
+        std::ostringstream detail;
+        detail
+            << "REPLAY SEARCH refusé ou inattendu : cmd="
+            << commande_api
+            << " code="
+            << resultat_api;
+        resultat.detail = detail.str();
+        close(fd);
+        return resultat;
+    }
+
+    if (payload_api.size() < 52)
+    {
+        resultat.detail =
+            "REPLAY SEARCH reçu avec payload trop court";
+        close(fd);
+        return resultat;
+    }
+
+    const std::uint32_t replay_cmd =
+        lire_u32_le(
+            payload_api.data() + 0
+        );
+
+    const std::uint32_t file_count =
+        lire_u32_le(
+            payload_api.data() + 44
+        );
+
+    const std::uint32_t file_total =
+        lire_u32_le(
+            payload_api.data() + 48
+        );
+
+    if (replay_cmd != 1)
+    {
+        std::ostringstream detail;
+        detail
+            << "REPLAY_RSP inattendu : sous-commande="
+            << replay_cmd;
+        resultat.detail = detail.str();
+        close(fd);
+        return resultat;
+    }
+
+    const std::size_t disponibles =
+        (payload_api.size() - 52) / 20;
+
+    const std::size_t a_lire =
+        std::min<std::size_t>(
+            {
+                static_cast<std::size_t>(file_count),
+                disponibles,
+                5
+            }
+        );
+
+    auto formater_epoch = [](
+        std::uint32_t valeur
+    )
+    {
+        const std::time_t t =
+            static_cast<std::time_t>(
+                valeur
+            );
+
+        std::tm locale = {};
+        char tampon[64] = {};
+
+        if (
+            !localtime_r(
+                &t,
+                &locale
+            ) ||
+            std::strftime(
+                tampon,
+                sizeof(tampon),
+                "%Y-%m-%d %H:%M:%S",
+                &locale
+            ) == 0
+        )
+        {
+            return
+                std::to_string(
+                    valeur
+                );
+        }
+
+        return std::string(tampon);
+    };
+
+    for (std::size_t i = 0; i < a_lire; ++i)
+    {
+        const std::uint8_t* p =
+            payload_api.data() +
+            52 +
+            i * 20;
+
+        FichierRechercheEsee fichier;
+        fichier.canal =
+            lire_u32_le(p + 0);
+        fichier.type =
+            lire_u32_le(p + 4);
+        fichier.debut =
+            formater_epoch(
+                lire_u32_le(p + 8)
+            );
+        fichier.fin =
+            formater_epoch(
+                lire_u32_le(p + 12)
+            );
+        fichier.taille =
+            lire_u32_le(p + 16);
+
+        resultat.fichiers.push_back(
+            std::move(fichier)
+        );
+    }
+
+    resultat.recherche = true;
+    resultat.code = 0;
+
+    std::ostringstream detail;
+    detail
+        << "REPLAY SEARCH confirmé : "
+        << file_count
+        << " reçu(s), "
+        << file_total
+        << " au total";
+
+    resultat.detail = detail.str();
+
+    close(fd);
+    return resultat;
+}
+
 ResultatRechercheEsee tester_recherche_native_esee(
     const std::string& adresse_nvr,
     const std::string& utilisateur,
