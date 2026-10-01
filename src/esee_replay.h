@@ -26,6 +26,16 @@ struct ResultatSessionIotEsee
     std::string detail;
 };
 
+struct ResultatAuthEsee
+{
+    bool websocket = false;
+    bool arq = false;
+    bool iot = false;
+    bool auth = false;
+    int code = 0;
+    std::string detail;
+};
+
 struct EnteteNarf
 {
     bool valide = false;
@@ -51,6 +61,14 @@ ResultatHandshakeEsee tester_handshake_esee(
 
 ResultatSessionIotEsee tester_session_iot_esee(
     const std::string& adresse_nvr,
+    int port = 10000,
+    int timeout_ms = 3000
+);
+
+ResultatAuthEsee tester_auth_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
     int port = 10000,
     int timeout_ms = 3000
 );
