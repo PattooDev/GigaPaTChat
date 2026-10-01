@@ -202,3 +202,8 @@ GIGAPATCHAT_ESEE_FIND=1 ./build/gigapatchat
 Le test s'authentifie d'abord avec AUTH1, puis interroge la caméra 1 (canal 0), la journée courante et le type 15 (tous types). Il lit au maximum cinq résultats afin de valider le protocole sans lancer encore de replay vidéo.
 
 Référence de structure : `include/proto.h` du dépôt `tuyungang/Automatic-Interface-Detection-Tool`.
+
+
+### Référence complémentaire
+
+Le dépôt public `harsh-chalo/trv-log-all-configs`, fichier `CameraSDK/connector.js`, a permis de confirmer le format exact utilisé par `find_file_start_2` et `replay_start`. Cette source est créditée comme référence d'interopérabilité, sans supposer qu'elle est l'auteur original du SDK minifié.
