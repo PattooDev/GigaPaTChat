@@ -2197,169 +2197,10 @@ ResultatRechercheEsee tester_recherche_replay_esee(
         return resultat;
     }
 
-    std::vector<std::uint8_t> recherche(
-        52,
-        0
-    );
-
-    auto ecrire_u32 = [&recherche](
-        std::size_t offset,
-        std::uint32_t valeur
-    )
-    {
-        recherche[offset + 0] =
-            static_cast<std::uint8_t>(
-                valeur & 0xFF
-            );
-        recherche[offset + 1] =
-            static_cast<std::uint8_t>(
-                (valeur >> 8) & 0xFF
-            );
-        recherche[offset + 2] =
-            static_cast<std::uint8_t>(
-                (valeur >> 16) & 0xFF
-            );
-        recherche[offset + 3] =
-            static_cast<std::uint8_t>(
-                (valeur >> 24) & 0xFF
-            );
-    };
-
-    ecrire_u32(0, 1);
-    ecrire_u32(4, 0);
-
-    if (canal > 0 && canal < 128)
-    {
-        const std::size_t octet =
-            8 +
-            static_cast<std::size_t>(
-                canal / 8
-            );
-
-        if (octet < 24)
-        {
-            recherche[octet] |=
-                static_cast<std::uint8_t>(
-                    1U << (canal % 8)
-                );
-        }
-    }
-
-    ecrire_u32(
-        24,
-        static_cast<std::uint32_t>(type)
-    );
-    ecrire_u32(28, 0);
-    ecrire_u32(
-        32,
-        static_cast<std::uint32_t>(debut_t)
-    );
-    ecrire_u32(
-        36,
-        static_cast<std::uint32_t>(fin_t)
-    );
-    ecrire_u32(40, 0);
-    ecrire_u32(44, 0);
-    ecrire_u32(48, 10);
-
-    if (
-        !envoyer_api(
-            fd,
-            sid,
-            2,
-            40,
-            recherche,
-            timeout_ms
-        )
-    )
-    {
-        resultat.detail =
-            "AUTH OK, échec envoi REPLAY SEARCH";
-        close(fd);
-        return resultat;
-    }
-
-    payload_api.clear();
-
-    if (
-        !recevoir_api(
-            fd,
-            commande_api,
-            resultat_api,
-            payload_api,
-            timeout_ms
-        )
-    )
-    {
-        resultat.detail =
-            "AUTH OK, aucune réponse REPLAY SEARCH";
-        close(fd);
-        return resultat;
-    }
-
-    resultat.code = resultat_api;
-
-    if (
-        commande_api != 41 ||
-        resultat_api != 0
-    )
-    {
-        std::ostringstream detail;
-        detail
-            << "REPLAY SEARCH refusé ou inattendu : cmd="
-            << commande_api
-            << " code="
-            << resultat_api;
-        resultat.detail = detail.str();
-        close(fd);
-        return resultat;
-    }
-
-    if (payload_api.size() < 52)
-    {
-        resultat.detail =
-            "REPLAY SEARCH reçu avec payload trop court";
-        close(fd);
-        return resultat;
-    }
-
-    const std::uint32_t replay_cmd =
-        lire_u32_le(
-            payload_api.data() + 0
-        );
-
-    const std::uint32_t file_count =
-        lire_u32_le(
-            payload_api.data() + 44
-        );
-
-    const std::uint32_t file_total =
-        lire_u32_le(
-            payload_api.data() + 48
-        );
-
-    if (replay_cmd != 1)
-    {
-        std::ostringstream detail;
-        detail
-            << "REPLAY_RSP inattendu : sous-commande="
-            << replay_cmd;
-        resultat.detail = detail.str();
-        close(fd);
-        return resultat;
-    }
-
-    const std::size_t disponibles =
-        (payload_api.size() - 52) / 20;
-
-    const std::size_t a_lire =
-        std::min<std::size_t>(
-            {
-                static_cast<std::size_t>(file_count),
-                disponibles,
-                5
-            }
-        );
+    const std::vector<int> types_recherche =
+        type == 15
+            ? std::vector<int>{1, 2, 4, 8}
+            : std::vector<int>{type};
 
     auto formater_epoch = [](
         std::uint32_t valeur
@@ -2395,32 +2236,237 @@ ResultatRechercheEsee tester_recherche_replay_esee(
         return std::string(tampon);
     };
 
-    for (std::size_t i = 0; i < a_lire; ++i)
+    std::uint32_t ticket = 2;
+    std::uint32_t total_annonce = 0;
+    std::ostringstream detail_types;
+    bool premier_type = true;
+
+    for (const int type_courant : types_recherche)
     {
-        const std::uint8_t* p =
-            payload_api.data() +
-            52 +
-            i * 20;
-
-        FichierRechercheEsee fichier;
-        fichier.canal =
-            lire_u32_le(p + 0);
-        fichier.type =
-            lire_u32_le(p + 4);
-        fichier.debut =
-            formater_epoch(
-                lire_u32_le(p + 8)
-            );
-        fichier.fin =
-            formater_epoch(
-                lire_u32_le(p + 12)
-            );
-        fichier.taille =
-            lire_u32_le(p + 16);
-
-        resultat.fichiers.push_back(
-            std::move(fichier)
+        std::vector<std::uint8_t> recherche(
+            52,
+            0
         );
+
+        auto ecrire_u32 = [&recherche](
+            std::size_t offset,
+            std::uint32_t valeur
+        )
+        {
+            recherche[offset + 0] =
+                static_cast<std::uint8_t>(
+                    valeur & 0xFF
+                );
+            recherche[offset + 1] =
+                static_cast<std::uint8_t>(
+                    (valeur >> 8) & 0xFF
+                );
+            recherche[offset + 2] =
+                static_cast<std::uint8_t>(
+                    (valeur >> 16) & 0xFF
+                );
+            recherche[offset + 3] =
+                static_cast<std::uint8_t>(
+                    (valeur >> 24) & 0xFF
+                );
+        };
+
+        ecrire_u32(0, 1);
+        ecrire_u32(4, 0);
+
+        if (canal > 0 && canal < 128)
+        {
+            const std::size_t octet =
+                8 +
+                static_cast<std::size_t>(
+                    canal / 8
+                );
+
+            if (octet < 24)
+            {
+                recherche[octet] |=
+                    static_cast<std::uint8_t>(
+                        1U << (canal % 8)
+                    );
+            }
+        }
+
+        ecrire_u32(
+            24,
+            static_cast<std::uint32_t>(
+                type_courant
+            )
+        );
+        ecrire_u32(28, 0);
+        ecrire_u32(
+            32,
+            static_cast<std::uint32_t>(
+                debut_t
+            )
+        );
+        ecrire_u32(
+            36,
+            static_cast<std::uint32_t>(
+                fin_t
+            )
+        );
+        ecrire_u32(40, 0);
+        ecrire_u32(44, 0);
+        ecrire_u32(48, 10);
+
+        if (
+            !envoyer_api(
+                fd,
+                sid,
+                ticket++,
+                40,
+                recherche,
+                timeout_ms
+            )
+        )
+        {
+            resultat.detail =
+                "AUTH OK, échec envoi REPLAY SEARCH";
+            close(fd);
+            return resultat;
+        }
+
+        payload_api.clear();
+
+        if (
+            !recevoir_api(
+                fd,
+                commande_api,
+                resultat_api,
+                payload_api,
+                timeout_ms
+            )
+        )
+        {
+            resultat.detail =
+                "AUTH OK, aucune réponse REPLAY SEARCH";
+            close(fd);
+            return resultat;
+        }
+
+        resultat.code = resultat_api;
+
+        if (
+            commande_api != 41 ||
+            resultat_api != 0
+        )
+        {
+            std::ostringstream detail;
+            detail
+                << "REPLAY SEARCH refusé ou inattendu : cmd="
+                << commande_api
+                << " code="
+                << resultat_api
+                << " type="
+                << type_courant;
+            resultat.detail = detail.str();
+            close(fd);
+            return resultat;
+        }
+
+        if (payload_api.size() < 52)
+        {
+            resultat.detail =
+                "REPLAY SEARCH reçu avec payload trop court";
+            close(fd);
+            return resultat;
+        }
+
+        const std::uint32_t replay_cmd =
+            lire_u32_le(
+                payload_api.data() + 0
+            );
+
+        const std::uint32_t file_count =
+            lire_u32_le(
+                payload_api.data() + 44
+            );
+
+        const std::uint32_t file_total =
+            lire_u32_le(
+                payload_api.data() + 48
+            );
+
+        if (replay_cmd != 1)
+        {
+            std::ostringstream detail;
+            detail
+                << "REPLAY_RSP inattendu : sous-commande="
+                << replay_cmd;
+            resultat.detail = detail.str();
+            close(fd);
+            return resultat;
+        }
+
+        total_annonce +=
+            file_total;
+
+        if (!premier_type)
+            detail_types << ", ";
+
+        detail_types
+            << "type "
+            << type_courant
+            << "="
+            << file_total;
+
+        premier_type = false;
+
+        const std::size_t disponibles =
+            (payload_api.size() - 52) / 20;
+
+        const std::size_t places_restantes =
+            resultat.fichiers.size() < 5
+                ? 5 - resultat.fichiers.size()
+                : 0;
+
+        const std::size_t a_lire =
+            std::min<std::size_t>(
+                {
+                    static_cast<std::size_t>(
+                        file_count
+                    ),
+                    disponibles,
+                    places_restantes
+                }
+            );
+
+        for (
+            std::size_t i = 0;
+            i < a_lire;
+            ++i
+        )
+        {
+            const std::uint8_t* p =
+                payload_api.data() +
+                52 +
+                i * 20;
+
+            FichierRechercheEsee fichier;
+            fichier.canal =
+                lire_u32_le(p + 0);
+            fichier.type =
+                lire_u32_le(p + 4);
+            fichier.debut =
+                formater_epoch(
+                    lire_u32_le(p + 8)
+                );
+            fichier.fin =
+                formater_epoch(
+                    lire_u32_le(p + 12)
+                );
+            fichier.qualite =
+                lire_u32_le(p + 16);
+
+            resultat.fichiers.push_back(
+                std::move(fichier)
+            );
+        }
     }
 
     resultat.recherche = true;
@@ -2429,10 +2475,10 @@ ResultatRechercheEsee tester_recherche_replay_esee(
     std::ostringstream detail;
     detail
         << "REPLAY SEARCH confirmé : "
-        << file_count
-        << " reçu(s), "
-        << file_total
-        << " au total";
+        << total_annonce
+        << " au total ("
+        << detail_types.str()
+        << ")";
 
     resultat.detail = detail.str();
 
