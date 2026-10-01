@@ -181,3 +181,24 @@ TCP -> WebSocket -> ARQ/KP2P -> IOT_OPEN -> API_AUTH_REQ/API_AUTH_RSP
 Le compte local actuellement valide sur le NVR est `admin` avec mot de passe vide. Le compte secondaire précédemment utilisé n'est plus présent dans la configuration du NVR. Ce constat explique les précédents retours `KP2P_ERR_AUTH_FAILED (-20)`.
 
 La prochaine étape expérimentale est la recherche native des enregistrements, puis l'ouverture du replay KP2P.
+
+
+## Recherche native FIND 90/100/110
+
+Le SDK KP2P public documente une recherche de fichiers par étapes :
+
+```text
+FIND_START_REQ/RSP  90/91
+FIND_NEXT_REQ/RSP   100/101
+FIND_STOP_REQ/RSP   110/111
+```
+
+GigaPaTChat expose un diagnostic séparé :
+
+```bash
+GIGAPATCHAT_ESEE_FIND=1 ./build/gigapatchat
+```
+
+Le test s'authentifie d'abord avec AUTH1, puis interroge la caméra 1 (canal 0), la journée courante et le type 15 (tous types). Il lit au maximum cinq résultats afin de valider le protocole sans lancer encore de replay vidéo.
+
+Référence de structure : `include/proto.h` du dépôt `tuyungang/Automatic-Interface-Detection-Tool`.
