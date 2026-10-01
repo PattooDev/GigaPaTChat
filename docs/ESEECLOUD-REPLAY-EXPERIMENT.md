@@ -147,3 +147,14 @@ GIGAPATCHAT_ESEE_AUTH3=1 ./build/gigapatchat
 ```
 
 AUTH1 et AUTH3 restent deux chemins expérimentaux distincts afin de pouvoir comparer précisément le comportement du firmware.
+
+
+## Vérification indépendante des identifiants via HTTP
+
+Pour distinguer un refus propre à KP2P d'identifiants réellement invalides, GigaPaTChat peut tester la même paire utilisateur/mot de passe sur l'API HTTP `recsearch` déjà utilisée pour les archives :
+
+```bash
+GIGAPATCHAT_HTTP_AUTH_TEST=1 ./build/gigapatchat
+```
+
+Le mot de passe reste saisi avec `getpass()`. Un résultat `RECSEARCH : OK` signifie que l'API HTTP du NVR accepte les identifiants, même si aucun enregistrement n'existe pour la journée.
