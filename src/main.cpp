@@ -1230,6 +1230,49 @@ int main()
         return 1;
     }
 
+    const char* mode_handshake_esee =
+        std::getenv("GIGAPATCHAT_ESEE_HANDSHAKE");
+
+    if (
+        mode_handshake_esee &&
+        std::string(mode_handshake_esee) == "1"
+    )
+    {
+        std::cout
+            << "\n[EseeCloud] Test WebSocket/KP2P expérimental...\n";
+
+        const ResultatHandshakeEsee resultat =
+            tester_handshake_esee(
+                adresse_nvr,
+                10000,
+                3000
+            );
+
+        std::cout
+            << "[EseeCloud] WebSocket : "
+            << (
+                resultat.websocket
+                    ? "OK"
+                    : "ECHEC"
+            )
+            << "\n"
+            << "[EseeCloud] ARQ/KP2P   : "
+            << (
+                resultat.arq
+                    ? "OK"
+                    : "ECHEC"
+            )
+            << "\n"
+            << "[EseeCloud] Détail     : "
+            << resultat.detail
+            << "\n";
+
+        return
+            resultat.arq
+                ? 0
+                : 3;
+    }
+
     const char* mode_sonde_esee =
         std::getenv("GIGAPATCHAT_ESEE_PROBE");
 
