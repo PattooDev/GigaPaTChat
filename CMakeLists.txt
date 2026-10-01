@@ -36,6 +36,7 @@ add_executable(gigapatchat
     src/main.cpp
     src/playback.cpp
     src/playback_hevc.cpp
+    src/esee_replay.cpp
     src/ui.cpp
 )
 
