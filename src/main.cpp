@@ -1376,7 +1376,10 @@ int main()
             << resultat.detail
             << "\n";
 
-        if (resultat.media)
+        if (
+            resultat.media &&
+            resultat.premiere_trame.valide
+        )
         {
             std::cout
                 << "[EseeCloud] Codec      : "
@@ -1394,6 +1397,21 @@ int main()
                 << resultat.premiere_trame.champ_124
                 << " / "
                 << resultat.premiere_trame.champ_128
+                << "\n";
+        }
+        else if (resultat.media)
+        {
+            std::cout
+                << "[EseeCloud] Taille brute: "
+                << resultat.taille_message_media
+                << " octets\n"
+                << "[EseeCloud] Offsets    : NARF@"
+                << resultat.offset_narf
+                << " / MARF@"
+                << resultat.offset_marf
+                << "\n"
+                << "[EseeCloud] Aperçu hex : "
+                << resultat.apercu_hex
                 << "\n";
         }
 
