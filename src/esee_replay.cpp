@@ -25,6 +25,7 @@
 #include <ctime>
 #include <cstdio>
 #include <sstream>
+#include <thread>
 #include <algorithm>
 #include <array>
 #include <iterator>
