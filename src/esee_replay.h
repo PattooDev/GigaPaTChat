@@ -105,6 +105,17 @@ ResultatAuthEsee tester_auth3_esee(
 );
 
 
+
+ResultatRechercheEsee tester_recherche_replay_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int canal = 0,
+    int type = 15,
+    int port = 10000,
+    int timeout_ms = 3000
+);
+
 ResultatRechercheEsee tester_recherche_native_esee(
     const std::string& adresse_nvr,
     const std::string& utilisateur,
