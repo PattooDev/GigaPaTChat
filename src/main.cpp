@@ -1230,6 +1230,117 @@ int main()
         return 1;
     }
 
+    const char* mode_find_esee =
+        std::getenv("GIGAPATCHAT_ESEE_FIND");
+
+    if (
+        mode_find_esee &&
+        std::string(mode_find_esee) == "1"
+    )
+    {
+        std::string utilisateur_find;
+
+        std::cout
+            << "Nom d'utilisateur du NVR : ";
+
+        if (
+            !std::getline(
+                std::cin,
+                utilisateur_find
+            ) ||
+            utilisateur_find.empty()
+        )
+        {
+            std::cerr
+                << "Erreur : nom d'utilisateur manquant.\n";
+
+            return 1;
+        }
+
+        char* saisie_find =
+            getpass(
+                "Mot de passe du NVR : "
+            );
+
+        if (!saisie_find)
+        {
+            std::cerr
+                << "Erreur : lecture du mot de passe impossible.\n";
+
+            return 1;
+        }
+
+        const std::string mot_de_passe_find =
+            saisie_find;
+
+        std::cout
+            << "\n[EseeCloud] Recherche native KP2P expérimentale...\n";
+
+        const ResultatRechercheEsee resultat =
+            tester_recherche_native_esee(
+                adresse_nvr,
+                utilisateur_find,
+                mot_de_passe_find,
+                0,
+                15,
+                10000,
+                3000
+            );
+
+        std::cout
+            << "[EseeCloud] WebSocket : "
+            << (resultat.websocket ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] ARQ/KP2P   : "
+            << (resultat.arq ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] IOT_OPEN   : "
+            << (resultat.iot ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] AUTH       : "
+            << (resultat.auth ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] FIND       : "
+            << (resultat.recherche ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] Code       : "
+            << resultat.code
+            << "\n"
+            << "[EseeCloud] Détail     : "
+            << resultat.detail
+            << "\n";
+
+        for (
+            std::size_t i = 0;
+            i < resultat.fichiers.size();
+            ++i
+        )
+        {
+            const FichierRechercheEsee& fichier =
+                resultat.fichiers[i];
+
+            std::cout
+                << "  "
+                << i + 1
+                << " | caméra "
+                << fichier.canal + 1
+                << " | type "
+                << fichier.type
+                << " | "
+                << fichier.debut
+                << " -> "
+                << fichier.fin
+                << " | "
+                << fichier.taille
+                << " octets\n";
+        }
+
+        return
+            resultat.recherche
+                ? 0
+                : 8;
+    }
+
     const char* mode_http_auth =
         std::getenv("GIGAPATCHAT_HTTP_AUTH_TEST");
 
