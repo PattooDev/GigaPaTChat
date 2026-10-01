@@ -74,6 +74,14 @@ GIGAPATCHAT_ESEE_IOT=1 ./build/gigapatchat
 
 Le résultat attendu est `WebSocket : OK`, `ARQ/KP2P : OK` puis `IOT_OPEN : OK`.
 
+Après validation de la couche IOT, l'authentification locale KP2P peut être testée explicitement :
+
+```bash
+GIGAPATCHAT_ESEE_AUTH=1 ./build/gigapatchat
+```
+
+Le programme demande l'utilisateur local du NVR puis le mot de passe via `getpass()`. Le mot de passe n'est ni affiché ni écrit dans les logs. La requête `API_AUTH_REQ` utilise les champs d'authentification AES-128-ECB observés dans le travail public de **meust3**, qui est crédité ci-dessus et dans le source.
+
 ## Suite si le port 10000 répond
 
 Le prochain jalon sera de reproduire proprement la séquence de replay observée :
