@@ -70,6 +70,21 @@ struct EnteteNarf
     std::uint32_t champ_128 = 0;
 };
 
+
+struct ResultatReplayEsee
+{
+    bool websocket = false;
+    bool arq = false;
+    bool iot = false;
+    bool auth = false;
+    bool demarrage = false;
+    bool media = false;
+    int code = 0;
+    std::string detail;
+    EnteteNarf premiere_trame;
+};
+
+
 ResultatSondeEsee sonder_service_esee(
     const std::string& adresse_nvr,
     int port = 10000,
@@ -126,6 +141,19 @@ ResultatRechercheEsee tester_recherche_native_esee(
     int type = 15,
     int port = 10000,
     int timeout_ms = 3000
+);
+
+
+ResultatReplayEsee tester_replay_start_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int canal,
+    int type,
+    std::int64_t debut_epoch,
+    std::int64_t fin_epoch,
+    int port = 10000,
+    int timeout_ms = 5000
 );
 
 EnteteNarf analyser_entete_narf(
