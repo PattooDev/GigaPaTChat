@@ -58,6 +58,14 @@ GIGAPATCHAT_ESEE_PROBE=1 ./build/gigapatchat
 
 Le programme demande uniquement l'adresse IP ou le nom du NVR, teste `<NVR>:10000`, affiche `JOIGNABLE` ou `INJOIGNABLE`, puis quitte.
 
+Une fois le port 10000 confirmé, le diagnostic suivant vérifie sans identifiants l'Upgrade WebSocket puis le handshake ARQ/KP2P :
+
+```bash
+GIGAPATCHAT_ESEE_HANDSHAKE=1 ./build/gigapatchat
+```
+
+Le résultat attendu est `WebSocket : OK` puis, si le NVR utilise bien le transport KP2P identifié, `ARQ/KP2P : OK`.
+
 ## Suite si le port 10000 répond
 
 Le prochain jalon sera de reproduire proprement la séquence de replay observée :
