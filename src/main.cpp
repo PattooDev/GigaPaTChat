@@ -1230,6 +1230,107 @@ int main()
         return 1;
     }
 
+    const char* mode_http_auth =
+        std::getenv("GIGAPATCHAT_HTTP_AUTH_TEST");
+
+    if (
+        mode_http_auth &&
+        std::string(mode_http_auth) == "1"
+    )
+    {
+        std::string utilisateur_http;
+
+        std::cout
+            << "Nom d'utilisateur du NVR : ";
+
+        if (
+            !std::getline(
+                std::cin,
+                utilisateur_http
+            ) ||
+            utilisateur_http.empty()
+        )
+        {
+            std::cerr
+                << "Erreur : nom d'utilisateur manquant.\n";
+
+            return 1;
+        }
+
+        char* saisie_http =
+            getpass(
+                "Mot de passe du NVR : "
+            );
+
+        if (!saisie_http)
+        {
+            std::cerr
+                << "Erreur : lecture du mot de passe impossible.\n";
+
+            return 1;
+        }
+
+        const std::string mot_de_passe_http =
+            saisie_http;
+
+        const std::time_t maintenant =
+            std::time(nullptr);
+
+        std::tm locale = {};
+        localtime_r(
+            &maintenant,
+            &locale
+        );
+
+        char date_http[32] = {};
+
+        std::strftime(
+            date_http,
+            sizeof(date_http),
+            "%Y-%m-%d",
+            &locale
+        );
+
+        std::vector<SessionNVR> sessions_http;
+        int total_http = 0;
+
+        std::cout
+            << "\n[HTTP] Test des identifiants via recsearch...\n";
+
+        const bool succes_http =
+            rechercher_archives_nvr(
+                adresse_nvr,
+                utilisateur_http,
+                mot_de_passe_http,
+                3,
+                15,
+                date_http,
+                "00:00:00",
+                "23:59:59",
+                sessions_http,
+                total_http
+            );
+
+        std::cout
+            << "[HTTP] RECSEARCH : "
+            << (succes_http ? "OK" : "ECHEC")
+            << "\n";
+
+        if (succes_http)
+        {
+            std::cout
+                << "[HTTP] Identifiants acceptés par l'API HTTP NVR.\n"
+                << "[HTTP] Enregistrements aujourd'hui : "
+                << total_http
+                << "\n";
+        }
+
+        return
+            succes_http
+                ? 0
+                : 7;
+    }
+
     const char* mode_auth3_esee =
         std::getenv("GIGAPATCHAT_ESEE_AUTH3");
 
