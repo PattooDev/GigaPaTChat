@@ -525,6 +525,483 @@ bool recevoir_ws_binaire(
     return true;
 }
 
+
+void ajouter_u32_le(
+    std::vector<std::uint8_t>& sortie,
+    std::uint32_t valeur
+)
+{
+    sortie.push_back(
+        static_cast<std::uint8_t>(
+            valeur & 0xFF
+        )
+    );
+    sortie.push_back(
+        static_cast<std::uint8_t>(
+            (valeur >> 8) & 0xFF
+        )
+    );
+    sortie.push_back(
+        static_cast<std::uint8_t>(
+            (valeur >> 16) & 0xFF
+        )
+    );
+    sortie.push_back(
+        static_cast<std::uint8_t>(
+            (valeur >> 24) & 0xFF
+        )
+    );
+}
+
+std::vector<std::uint8_t> fabriquer_paquet_iot(
+    std::uint32_t commande,
+    std::uint32_t sid,
+    const std::vector<std::uint8_t>& payload,
+    std::int32_t erreur = 0
+)
+{
+    std::vector<std::uint8_t> paquet(
+        32,
+        0
+    );
+
+    paquet[0] = 0xAB;
+    paquet[1] = 0xBC;
+    paquet[2] = 0xCD;
+    paquet[3] = 0xDE;
+
+    paquet[4] =
+        static_cast<std::uint8_t>(
+            commande & 0xFF
+        );
+    paquet[5] =
+        static_cast<std::uint8_t>(
+            (commande >> 8) & 0xFF
+        );
+    paquet[6] =
+        static_cast<std::uint8_t>(
+            (commande >> 16) & 0xFF
+        );
+    paquet[7] =
+        static_cast<std::uint8_t>(
+            (commande >> 24) & 0xFF
+        );
+
+    paquet[11] = 0x01;
+
+    paquet[16] =
+        static_cast<std::uint8_t>(
+            sid & 0xFF
+        );
+    paquet[17] =
+        static_cast<std::uint8_t>(
+            (sid >> 8) & 0xFF
+        );
+    paquet[18] =
+        static_cast<std::uint8_t>(
+            (sid >> 16) & 0xFF
+        );
+    paquet[19] =
+        static_cast<std::uint8_t>(
+            (sid >> 24) & 0xFF
+        );
+
+    const std::uint32_t erreur_u =
+        static_cast<std::uint32_t>(
+            erreur
+        );
+
+    paquet[24] =
+        static_cast<std::uint8_t>(
+            erreur_u & 0xFF
+        );
+    paquet[25] =
+        static_cast<std::uint8_t>(
+            (erreur_u >> 8) & 0xFF
+        );
+    paquet[26] =
+        static_cast<std::uint8_t>(
+            (erreur_u >> 16) & 0xFF
+        );
+    paquet[27] =
+        static_cast<std::uint8_t>(
+            (erreur_u >> 24) & 0xFF
+        );
+
+    const std::uint32_t longueur =
+        static_cast<std::uint32_t>(
+            payload.size()
+        );
+
+    paquet[28] =
+        static_cast<std::uint8_t>(
+            longueur & 0xFF
+        );
+    paquet[29] =
+        static_cast<std::uint8_t>(
+            (longueur >> 8) & 0xFF
+        );
+    paquet[30] =
+        static_cast<std::uint8_t>(
+            (longueur >> 16) & 0xFF
+        );
+    paquet[31] =
+        static_cast<std::uint8_t>(
+            (longueur >> 24) & 0xFF
+        );
+
+    paquet.insert(
+        paquet.end(),
+        payload.begin(),
+        payload.end()
+    );
+
+    return paquet;
+}
+
+bool envoyer_iot(
+    int fd,
+    std::uint32_t commande,
+    std::uint32_t sid,
+    const std::vector<std::uint8_t>& payload,
+    int timeout_ms
+)
+{
+    static constexpr std::uint8_t
+        arq_data[4] =
+    {
+        0xCE, 0xFA, 0xEF, 0xFE
+    };
+
+    const std::vector<std::uint8_t> paquet =
+        fabriquer_paquet_iot(
+            commande,
+            sid,
+            payload
+        );
+
+    std::vector<std::uint8_t> annonce(
+        std::begin(arq_data),
+        std::end(arq_data)
+    );
+
+    ajouter_u32_le(
+        annonce,
+        static_cast<std::uint32_t>(
+            paquet.size()
+        )
+    );
+
+    return
+        envoyer_ws_binaire(
+            fd,
+            annonce,
+            timeout_ms
+        ) &&
+        envoyer_ws_binaire(
+            fd,
+            paquet,
+            timeout_ms
+        );
+}
+
+bool recevoir_iot(
+    int fd,
+    std::uint32_t& commande,
+    std::int32_t& erreur,
+    std::vector<std::uint8_t>& payload,
+    int timeout_ms
+)
+{
+    const auto debut =
+        std::chrono::steady_clock::now();
+
+    for (;;)
+    {
+        const auto ecoule =
+            std::chrono::duration_cast<
+                std::chrono::milliseconds
+            >(
+                std::chrono::steady_clock::now() -
+                debut
+            ).count();
+
+        const int restant =
+            timeout_ms -
+            static_cast<int>(
+                ecoule
+            );
+
+        if (restant <= 0)
+            return false;
+
+        std::vector<std::uint8_t> message;
+
+        if (
+            !recevoir_ws_binaire(
+                fd,
+                message,
+                restant
+            )
+        )
+        {
+            return false;
+        }
+
+        if (
+            message.size() >= 4 &&
+            message[0] == 0xCE &&
+            message[1] == 0xFA &&
+            message[2] == 0xEF &&
+            message[3] == 0xFE
+        )
+        {
+            continue;
+        }
+
+        if (
+            message.size() < 32 ||
+            message[0] != 0xAB ||
+            message[1] != 0xBC ||
+            message[2] != 0xCD ||
+            message[3] != 0xDE
+        )
+        {
+            continue;
+        }
+
+        commande =
+            lire_u32_le(
+                message.data() + 4
+            );
+
+        erreur =
+            static_cast<std::int32_t>(
+                lire_u32_le(
+                    message.data() + 24
+                )
+            );
+
+        const std::uint32_t longueur =
+            lire_u32_le(
+                message.data() + 28
+            );
+
+        if (
+            longueur >
+            message.size() - 32
+        )
+        {
+            return false;
+        }
+
+        payload.assign(
+            message.begin() + 32,
+            message.begin() + 32 + longueur
+        );
+
+        return true;
+    }
+}
+
+int ouvrir_websocket_arq(
+    const std::string& adresse_nvr,
+    int port,
+    int timeout_ms,
+    bool& websocket_ok,
+    bool& arq_ok,
+    std::uint32_t& sid,
+    std::string& detail
+)
+{
+    websocket_ok = false;
+    arq_ok = false;
+    sid = 1234;
+
+    std::string detail_tcp;
+
+    const int fd =
+        ouvrir_socket_tcp(
+            adresse_nvr,
+            port,
+            timeout_ms,
+            detail_tcp
+        );
+
+    if (fd < 0)
+    {
+        detail = detail_tcp;
+        return -1;
+    }
+
+    std::ostringstream requete;
+
+    requete
+        << "GET / HTTP/1.1\r\n"
+        << "Host: "
+        << adresse_nvr
+        << ":"
+        << port
+        << "\r\n"
+        << "Upgrade: websocket\r\n"
+        << "Connection: Upgrade\r\n"
+        << "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+        << "Sec-WebSocket-Version: 13\r\n"
+        << "\r\n";
+
+    const std::string texte =
+        requete.str();
+
+    if (
+        !envoyer_tout(
+            fd,
+            reinterpret_cast<
+                const std::uint8_t*
+            >(
+                texte.data()
+            ),
+            texte.size(),
+            timeout_ms
+        )
+    )
+    {
+        detail =
+            "échec envoi Upgrade WebSocket";
+        close(fd);
+        return -1;
+    }
+
+    std::string reponse_http;
+
+    if (
+        !lire_entete_http(
+            fd,
+            reponse_http,
+            timeout_ms
+        )
+    )
+    {
+        detail =
+            "aucune réponse HTTP/WebSocket";
+        close(fd);
+        return -1;
+    }
+
+    const std::size_t fin_ligne =
+        reponse_http.find("\r\n");
+
+    const std::string statut =
+        reponse_http.substr(
+            0,
+            fin_ligne
+        );
+
+    if (
+        statut.find(" 101 ") ==
+            std::string::npos
+    )
+    {
+        detail =
+            "Upgrade WebSocket refusé : " +
+            statut;
+
+        close(fd);
+        return -1;
+    }
+
+    websocket_ok = true;
+
+    static constexpr std::uint8_t
+        arq_open[16] =
+    {
+        0xD9, 0xFF, 0xCC, 0x02,
+        0x8C, 0x38, 0xEE, 0xD2,
+        0xD1, 0x99, 0xAC, 0x60,
+        0x26, 0x94, 0x7F, 0xAE
+    };
+
+    static constexpr std::uint8_t
+        arq_reponse[16] =
+    {
+        0x96, 0xD5, 0x39, 0x0D,
+        0x12, 0xFC, 0xBE, 0x8F,
+        0x47, 0x90, 0xD9, 0x32,
+        0xCC, 0xD8, 0x49, 0xF3
+    };
+
+    std::vector<std::uint8_t>
+        ouverture(
+            std::begin(arq_open),
+            std::end(arq_open)
+        );
+
+    ajouter_u32_le(
+        ouverture,
+        sid
+    );
+
+    if (
+        !envoyer_ws_binaire(
+            fd,
+            ouverture,
+            timeout_ms
+        )
+    )
+    {
+        detail =
+            "WebSocket OK, échec envoi ARQ_OPEN";
+        close(fd);
+        return -1;
+    }
+
+    std::vector<std::uint8_t>
+        reponse_arq;
+
+    if (
+        !recevoir_ws_binaire(
+            fd,
+            reponse_arq,
+            timeout_ms
+        )
+    )
+    {
+        detail =
+            "WebSocket OK, aucune réponse ARQ";
+        close(fd);
+        return -1;
+    }
+
+    if (
+        reponse_arq.size() !=
+            sizeof(arq_reponse) ||
+        std::memcmp(
+            reponse_arq.data(),
+            arq_reponse,
+            sizeof(arq_reponse)
+        ) != 0
+    )
+    {
+        std::ostringstream erreur_detail;
+
+        erreur_detail
+            << "WebSocket OK, réponse ARQ inattendue ("
+            << reponse_arq.size()
+            << " octets)";
+
+        detail =
+            erreur_detail.str();
+
+        close(fd);
+        return -1;
+    }
+
+    arq_ok = true;
+    detail =
+        "WebSocket 101 + ARQ_OPEN reconnu";
+
+    return fd;
+}
+
 } // namespace
 
 ResultatSondeEsee sonder_service_esee(
@@ -738,204 +1215,130 @@ ResultatHandshakeEsee tester_handshake_esee(
     if (timeout_ms <= 0)
         timeout_ms = 3000;
 
-    std::string detail_tcp;
+    std::uint32_t sid = 0;
 
     const int fd =
-        ouvrir_socket_tcp(
+        ouvrir_websocket_arq(
             adresse_nvr,
             port,
             timeout_ms,
-            detail_tcp
+            resultat.websocket,
+            resultat.arq,
+            sid,
+            resultat.detail
+        );
+
+    if (fd >= 0)
+        close(fd);
+
+    return resultat;
+}
+
+ResultatSessionIotEsee tester_session_iot_esee(
+    const std::string& adresse_nvr,
+    int port,
+    int timeout_ms
+)
+{
+    ResultatSessionIotEsee resultat;
+
+    if (
+        adresse_nvr.empty() ||
+        port <= 0 ||
+        port > 65535
+    )
+    {
+        resultat.detail =
+            "paramètres invalides";
+        return resultat;
+    }
+
+    if (timeout_ms <= 0)
+        timeout_ms = 3000;
+
+    std::uint32_t sid = 0;
+
+    const int fd =
+        ouvrir_websocket_arq(
+            adresse_nvr,
+            port,
+            timeout_ms,
+            resultat.websocket,
+            resultat.arq,
+            sid,
+            resultat.detail
         );
 
     if (fd < 0)
-    {
-        resultat.detail =
-            detail_tcp;
         return resultat;
-    }
-
-    std::ostringstream requete;
-
-    requete
-        << "GET / HTTP/1.1\r\n"
-        << "Host: "
-        << adresse_nvr
-        << ":"
-        << port
-        << "\r\n"
-        << "Upgrade: websocket\r\n"
-        << "Connection: Upgrade\r\n"
-        << "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-        << "Sec-WebSocket-Version: 13\r\n"
-        << "\r\n";
-
-    const std::string texte =
-        requete.str();
-
-    if (
-        !envoyer_tout(
-            fd,
-            reinterpret_cast<
-                const std::uint8_t*
-            >(
-                texte.data()
-            ),
-            texte.size(),
-            timeout_ms
-        )
-    )
-    {
-        resultat.detail =
-            "échec envoi Upgrade WebSocket";
-        close(fd);
-        return resultat;
-    }
-
-    std::string reponse_http;
-
-    if (
-        !lire_entete_http(
-            fd,
-            reponse_http,
-            timeout_ms
-        )
-    )
-    {
-        resultat.detail =
-            "aucune réponse HTTP/WebSocket";
-        close(fd);
-        return resultat;
-    }
-
-    const std::size_t fin_ligne =
-        reponse_http.find("\r\n");
-
-    const std::string statut =
-        reponse_http.substr(
-            0,
-            fin_ligne
-        );
-
-    if (
-        statut.find(" 101 ") ==
-            std::string::npos
-    )
-    {
-        resultat.detail =
-            "Upgrade WebSocket refusé : " +
-            statut;
-
-        close(fd);
-        return resultat;
-    }
-
-    resultat.websocket = true;
-
-    static constexpr std::uint8_t
-        arq_open[16] =
-    {
-        0xD9, 0xFF, 0xCC, 0x02,
-        0x8C, 0x38, 0xEE, 0xD2,
-        0xD1, 0x99, 0xAC, 0x60,
-        0x26, 0x94, 0x7F, 0xAE
-    };
-
-    static constexpr std::uint8_t
-        arq_reponse[16] =
-    {
-        0x96, 0xD5, 0x39, 0x0D,
-        0x12, 0xFC, 0xBE, 0x8F,
-        0x47, 0x90, 0xD9, 0x32,
-        0xCC, 0xD8, 0x49, 0xF3
-    };
-
-    constexpr std::uint32_t sid =
-        1234;
 
     std::vector<std::uint8_t>
-        ouverture(
-            std::begin(arq_open),
-            std::end(arq_open)
-        );
+        payload_ouverture;
 
-    ouverture.push_back(
-        static_cast<std::uint8_t>(
-            sid & 0xFF
-        )
+    ajouter_u32_le(
+        payload_ouverture,
+        sid
     );
 
-    ouverture.push_back(
-        static_cast<std::uint8_t>(
-            (sid >> 8) & 0xFF
-        )
-    );
-
-    ouverture.push_back(
-        static_cast<std::uint8_t>(
-            (sid >> 16) & 0xFF
-        )
-    );
-
-    ouverture.push_back(
-        static_cast<std::uint8_t>(
-            (sid >> 24) & 0xFF
-        )
+    ajouter_u32_le(
+        payload_ouverture,
+        0
     );
 
     if (
-        !envoyer_ws_binaire(
+        !envoyer_iot(
             fd,
-            ouverture,
+            20,
+            sid,
+            payload_ouverture,
             timeout_ms
         )
     )
     {
         resultat.detail =
-            "WebSocket OK, échec envoi ARQ_OPEN";
+            "ARQ OK, échec envoi IOT_OPEN_REQ";
         close(fd);
         return resultat;
     }
 
-    std::vector<std::uint8_t>
-        reponse_arq;
+    std::uint32_t commande = 0;
+    std::int32_t erreur = 0;
+    std::vector<std::uint8_t> payload;
 
     if (
-        !recevoir_ws_binaire(
+        !recevoir_iot(
             fd,
-            reponse_arq,
+            commande,
+            erreur,
+            payload,
             timeout_ms
         )
     )
     {
         resultat.detail =
-            "WebSocket OK, aucune réponse ARQ";
+            "ARQ OK, aucune réponse IOT";
         close(fd);
         return resultat;
     }
 
     if (
-        reponse_arq.size() ==
-            sizeof(arq_reponse) &&
-        std::memcmp(
-            reponse_arq.data(),
-            arq_reponse,
-            sizeof(arq_reponse)
-        ) == 0
+        commande == 21 &&
+        erreur == 0
     )
     {
-        resultat.arq = true;
+        resultat.iot = true;
         resultat.detail =
-            "WebSocket 101 + ARQ_OPEN reconnu";
+            "WebSocket + ARQ + IOT_OPEN confirmés";
     }
     else
     {
         std::ostringstream detail;
 
         detail
-            << "WebSocket OK, réponse ARQ inattendue ("
-            << reponse_arq.size()
-            << " octets)";
+            << "réponse IOT inattendue : cmd="
+            << commande
+            << " erreur="
+            << erreur;
 
         resultat.detail =
             detail.str();
