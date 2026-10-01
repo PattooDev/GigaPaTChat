@@ -183,9 +183,11 @@ Le compte local actuellement valide sur le NVR est `admin` avec mot de passe vid
 La prochaine étape expérimentale est la recherche native des enregistrements, puis l'ouverture du replay KP2P.
 
 
-## Recherche native FIND 90/100/110
+## Recherche native des enregistrements
 
-Le SDK KP2P public documente une recherche de fichiers par étapes :
+Le SDK KP2P public documente deux familles de recherche.
+
+### Ancienne famille FIND 90/100/110
 
 ```text
 FIND_START_REQ/RSP  90/91
@@ -193,17 +195,43 @@ FIND_NEXT_REQ/RSP   100/101
 FIND_STOP_REQ/RSP   110/111
 ```
 
-GigaPaTChat expose un diagnostic séparé :
+Cette voie a été testée sur le NVR Gigamedia. Le transport et l'authentification sont corrects, et le NVR reconnaît la commande, mais répond :
+
+```text
+cmd=91 code=-1
+```
+
+Cette famille n'est donc pas retenue pour la suite du replay natif.
+
+### Famille REPLAY SEARCH 40/41
+
+Le fichier public `CameraSDK/connector.js` du dépôt `harsh-chalo/trv-log-all-configs` montre que `find_file_start_2(...)` utilise :
+
+```text
+APP_PROTO_CMD_REPLAY_REQ = 40
+APP_PROTO_CMD_REPLAY_RSP = 41
+APP_PROTO_PARAM_REPLAY_CMD_SEARCH = 1
+```
+
+Le même code donne la disposition exacte du payload de 52 octets :
+- sous-commande REPLAY ;
+- type d'ouverture ;
+- masque de canaux ;
+- type d'enregistrement ;
+- timestamps Unix de début et de fin ;
+- index de page ;
+- nombre d'enregistrements demandés.
+
+Chaque enregistrement renvoyé occupe ensuite 20 octets : canal, type, début, fin et qualité.
+
+GigaPaTChat conserve la même commande de diagnostic :
 
 ```bash
 GIGAPATCHAT_ESEE_FIND=1 ./build/gigapatchat
 ```
 
-Le test s'authentifie d'abord avec AUTH1, puis interroge la caméra 1 (canal 0), la journée courante et le type 15 (tous types). Il lit au maximum cinq résultats afin de valider le protocole sans lancer encore de replay vidéo.
+Le test s'authentifie avec AUTH1, interroge la caméra 1 (canal 0), la journée courante et le type 15 (tous types), puis affiche au maximum cinq enregistrements.
 
-Référence de structure : `include/proto.h` du dépôt `tuyungang/Automatic-Interface-Detection-Tool`.
-
-
-### Référence complémentaire
-
-Le dépôt public `harsh-chalo/trv-log-all-configs`, fichier `CameraSDK/connector.js`, a permis de confirmer le format exact utilisé par `find_file_start_2` et `replay_start`. Cette source est créditée comme référence d'interopérabilité, sans supposer qu'elle est l'auteur original du SDK minifié.
+Références :
+- `tuyungang/Automatic-Interface-Detection-Tool` pour les constantes et structures KP2P ;
+- `harsh-chalo/trv-log-all-configs/CameraSDK/connector.js` comme référence publique du comportement de `find_file_start_2` et `replay_start`. Ce dépôt est crédité comme source publique de référence, sans supposer qu'il est l'auteur original du SDK minifié.
