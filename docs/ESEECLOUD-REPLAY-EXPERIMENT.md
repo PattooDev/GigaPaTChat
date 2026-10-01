@@ -66,6 +66,14 @@ GIGAPATCHAT_ESEE_HANDSHAKE=1 ./build/gigapatchat
 
 Le résultat attendu est `WebSocket : OK` puis, si le NVR utilise bien le transport KP2P identifié, `ARQ/KP2P : OK`.
 
+Après validation de ce handshake, le test suivant ouvre uniquement la couche IOT, toujours sans authentification utilisateur :
+
+```bash
+GIGAPATCHAT_ESEE_IOT=1 ./build/gigapatchat
+```
+
+Le résultat attendu est `WebSocket : OK`, `ARQ/KP2P : OK` puis `IOT_OPEN : OK`.
+
 ## Suite si le port 10000 répond
 
 Le prochain jalon sera de reproduire proprement la séquence de replay observée :
