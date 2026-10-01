@@ -253,3 +253,13 @@ Code       : 0
 Avec le type 15 envoyé directement, le NVR a répondu `0 reçu(s), 0 au total`. La comparaison avec l'interface du client EseeCloud public a montré que ce client n'envoie pas 15 : il propose uniquement 1, 2, 4 et 8. Le diagnostic a donc été corrigé pour tester ces quatre types séparément.
 
 Le dernier champ de chaque entrée de 20 octets est également documenté comme `quality`, et non comme une taille de fichier.
+
+
+### Comparaison directe HTTP -> KP2P
+
+Pour éliminer les ambiguïtés de canal, type et plage temporelle, le diagnostic `GIGAPATCHAT_ESEE_FIND=1` récupère maintenant d'abord une archive réelle via l'API HTTP `recsearch`. Il réutilise ensuite exactement le canal, le type, l'heure de début et l'heure de fin de cette archive comme critères de la requête `REPLAY SEARCH`.
+
+Cette comparaison permet de distinguer :
+- un problème de choix de critères ;
+- un problème d'encodage natif KP2P ;
+- un comportement différent entre les index HTTP et KP2P du même NVR.
