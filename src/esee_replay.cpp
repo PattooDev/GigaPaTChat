@@ -6,8 +6,11 @@
  *   https://github.com/BigGecko01/EseeCloud-Raw-Exporter
  * - meust3/home-assistant-jooan-nvr
  *   https://github.com/meust3/home-assistant-jooan-nvr
+ * - tuyungang/Automatic-Interface-Detection-Tool
+ *   https://github.com/tuyungang/Automatic-Interface-Detection-Tool
  *
- * Thanks to their authors for publishing their reverse-engineering work.
+ * Thanks to these authors/maintainers for making protocol research and
+ * SDK reference material publicly available.
  * See docs/ESEECLOUD-REPLAY-EXPERIMENT.md for detailed credits and licenses.
  */
 
@@ -1799,6 +1802,22 @@ ResultatAuthEsee tester_auth_esee(
             << commande_api
             << " code="
             << resultat_api;
+
+        if (resultat_api == -20)
+        {
+            detail
+                << " (KP2P_ERR_AUTH_FAILED)";
+        }
+        else if (resultat_api == -21)
+        {
+            detail
+                << " (KP2P_ERR_GET_NONCE_FAILED)";
+        }
+        else if (resultat_api == -22)
+        {
+            detail
+                << " (KP2P_ERR_AUTH2_FAILED)";
+        }
 
         resultat.detail =
             detail.str();
