@@ -31,7 +31,8 @@ Un grand merci aux auteurs dont les travaux publics ont permis d'accélérer cet
 
 - **BigGecko01** — auteur de `EseeCloud-Raw-Exporter`, pour la documentation du replay EseeCloud, de l'encapsulation NARF/MARF et de la fragmentation des trames ;
 - **meust3** — auteur de `home-assistant-jooan-nvr`, pour l'implémentation et la documentation du transport local KP2P ;
-- **dbuezas** — auteur de `icsee-ptz`, utilisé comme référence complémentaire pour l'écosystème DVRIP/XM/ICSee.
+- **dbuezas** — auteur de `icsee-ptz`, utilisé comme référence complémentaire pour l'écosystème DVRIP/XM/ICSee ;
+- **tuyungang** — dépôt `Automatic-Interface-Detection-Tool`, qui rend accessible un en-tête SDK KP2P public contenant notamment les codes d'erreur et les API de recherche/relecture des enregistrements.
 
 Leurs dépôts restent la source de référence pour leurs travaux respectifs. GigaPaTChat ne prétend pas en être l'auteur et conserve les liens et mentions de licence correspondants.
 
@@ -97,3 +98,30 @@ connexion
 ```
 
 Cette voie restera expérimentale tant qu'elle n'aura pas été validée sur le NVR Gigamedia réel.
+
+
+## Codes d'erreur KP2P confirmés
+
+Le header SDK public `kp2psdk.h` expose notamment :
+
+```text
+0    KP2P_ERR_SUCCESS
+-20  KP2P_ERR_AUTH_FAILED
+-21  KP2P_ERR_GET_NONCE_FAILED
+-22  KP2P_ERR_AUTH2_FAILED
+-50  KP2P_ERR_REC_SEARCH_FAILED
+-51  KP2P_ERR_REC_PLAY_FAILED
+```
+
+Sur le NVR Gigamedia testé, `API_AUTH_RSP` a retourné `-20` avec le compte essayé : le transport WebSocket/ARQ/IOT et le format de requête AUTH sont acceptés, mais les identifiants sont refusés.
+
+Le même header confirme aussi l'existence des API :
+
+```text
+kp2p_rec_find_file_start(...)
+kp2p_rec_find_file_next(...)
+kp2p_rec_play_start(...)
+kp2p_rec_play_start2(...)
+```
+
+Ces éléments serviront à la prochaine étape de rétro-ingénierie du replay natif.
