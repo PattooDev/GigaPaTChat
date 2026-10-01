@@ -22,6 +22,7 @@
 #include <ctime>
 #include <cstdio>
 #include <sstream>
+#include <algorithm>
 #include <array>
 #include <iterator>
 #include <random>
