@@ -10,6 +10,7 @@
 #include <string>
 #include <unistd.h>
 
+#include "esee_replay.h"
 #include "playback.h"
 #include "ui.h"
 
@@ -1227,6 +1228,45 @@ int main()
             << "Erreur : adresse du NVR manquante.\n";
 
         return 1;
+    }
+
+    const char* mode_sonde_esee =
+        std::getenv("GIGAPATCHAT_ESEE_PROBE");
+
+    if (
+        mode_sonde_esee &&
+        std::string(mode_sonde_esee) == "1"
+    )
+    {
+        std::cout
+            << "\n[EseeCloud] Sonde expérimentale du service natif...\n";
+
+        const ResultatSondeEsee resultat =
+            sonder_service_esee(
+                adresse_nvr,
+                10000,
+                2000
+            );
+
+        std::cout
+            << "[EseeCloud] "
+            << adresse_nvr
+            << ":"
+            << resultat.port
+            << " -> "
+            << (
+                resultat.joignable
+                    ? "JOIGNABLE"
+                    : "INJOIGNABLE"
+            )
+            << " ("
+            << resultat.detail
+            << ")\n";
+
+        return
+            resultat.joignable
+                ? 0
+                : 2;
     }
 
     std::string utilisateur;
