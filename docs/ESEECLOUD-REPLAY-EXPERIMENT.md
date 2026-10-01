@@ -263,3 +263,24 @@ Cette comparaison permet de distinguer :
 - un problème de choix de critères ;
 - un problème d'encodage natif KP2P ;
 - un comportement différent entre les index HTTP et KP2P du même NVR.
+
+
+## REPLAY SEARCH confirmé sur une archive réelle
+
+Validation matérielle croisée HTTP -> KP2P sur le NVR Gigamedia :
+
+```text
+[HTTP] caméra 2 | type 8 | début=1790859600 | fin=1790860380
+
+[EseeCloud] WebSocket : OK
+[EseeCloud] ARQ/KP2P   : OK
+[EseeCloud] IOT_OPEN   : OK
+[EseeCloud] AUTH       : OK
+[EseeCloud] SEARCH     : OK
+[EseeCloud] Code       : 0
+[EseeCloud] Détail     : REPLAY SEARCH confirmé : 2 au total (type 8=2)
+```
+
+Cette validation confirme que la voie native `APP_PROTO_CMD_REPLAY_REQ/RSP 40/41` avec la sous-commande `SEARCH=1` retrouve effectivement les archives du NVR lorsque canal, type et intervalle correspondent à un enregistrement réel.
+
+Le prochain jalon est `REPLAY START` (sous-commande 3) sur ce même enregistrement, puis la réception d'une première trame de replay.
