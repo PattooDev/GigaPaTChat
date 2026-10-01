@@ -18,6 +18,14 @@ struct ResultatHandshakeEsee
     std::string detail;
 };
 
+struct ResultatSessionIotEsee
+{
+    bool websocket = false;
+    bool arq = false;
+    bool iot = false;
+    std::string detail;
+};
+
 struct EnteteNarf
 {
     bool valide = false;
@@ -36,6 +44,12 @@ ResultatSondeEsee sonder_service_esee(
 );
 
 ResultatHandshakeEsee tester_handshake_esee(
+    const std::string& adresse_nvr,
+    int port = 10000,
+    int timeout_ms = 3000
+);
+
+ResultatSessionIotEsee tester_session_iot_esee(
     const std::string& adresse_nvr,
     int port = 10000,
     int timeout_ms = 3000
