@@ -2023,7 +2023,9 @@ ResultatRechercheEsee tester_recherche_replay_esee(
     int canal,
     int type,
     int port,
-    int timeout_ms
+    int timeout_ms,
+    std::int64_t debut_epoch,
+    std::int64_t fin_epoch
 )
 {
     ResultatRechercheEsee resultat;
@@ -2180,11 +2182,26 @@ ResultatRechercheEsee tester_recherche_replay_esee(
     fin_tm.tm_min = 59;
     fin_tm.tm_sec = 59;
 
-    const std::time_t debut_t =
+    std::time_t debut_t =
         std::mktime(&debut_tm);
 
-    const std::time_t fin_t =
+    std::time_t fin_t =
         std::mktime(&fin_tm);
+
+    if (
+        debut_epoch > 0 &&
+        fin_epoch > debut_epoch
+    )
+    {
+        debut_t =
+            static_cast<std::time_t>(
+                debut_epoch
+            );
+        fin_t =
+            static_cast<std::time_t>(
+                fin_epoch
+            );
+    }
 
     if (
         debut_t == static_cast<std::time_t>(-1) ||
