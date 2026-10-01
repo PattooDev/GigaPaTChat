@@ -455,153 +455,304 @@ bool envoyer_ws_binaire(
     );
 }
 
+bool envoyer_ws_controle(
+    int fd,
+    std::uint8_t opcode,
+    const std::vector<std::uint8_t>& payload,
+    int timeout_ms
+)
+{
+    if (
+        payload.size() > 125 ||
+        opcode < 0x08 ||
+        opcode > 0x0F
+    )
+    {
+        return false;
+    }
+
+    std::array<std::uint8_t, 4> masque = {};
+    std::random_device aleatoire;
+
+    for (auto& octet : masque)
+    {
+        octet =
+            static_cast<std::uint8_t>(
+                aleatoire()
+            );
+    }
+
+    std::vector<std::uint8_t> trame;
+    trame.reserve(
+        2 +
+        masque.size() +
+        payload.size()
+    );
+
+    trame.push_back(
+        static_cast<std::uint8_t>(
+            0x80 | opcode
+        )
+    );
+
+    trame.push_back(
+        static_cast<std::uint8_t>(
+            0x80 | payload.size()
+        )
+    );
+
+    trame.insert(
+        trame.end(),
+        masque.begin(),
+        masque.end()
+    );
+
+    for (
+        std::size_t i = 0;
+        i < payload.size();
+        ++i
+    )
+    {
+        trame.push_back(
+            payload[i] ^
+            masque[i % masque.size()]
+        );
+    }
+
+    return envoyer_tout(
+        fd,
+        trame.data(),
+        trame.size(),
+        timeout_ms
+    );
+}
+
 bool recevoir_ws_binaire(
     int fd,
     std::vector<std::uint8_t>& payload,
     int timeout_ms
 )
 {
-    std::uint8_t entete[2] = {};
+    const auto debut =
+        std::chrono::steady_clock::now();
 
-    if (
-        !recevoir_exact(
-            fd,
-            entete,
-            sizeof(entete),
-            timeout_ms
-        )
-    )
+    std::vector<std::uint8_t> assemble;
+    bool fragmentation = false;
+
+    for (;;)
     {
-        return false;
-    }
+        const auto ecoule =
+            std::chrono::duration_cast<
+                std::chrono::milliseconds
+            >(
+                std::chrono::steady_clock::now() -
+                debut
+            ).count();
 
-    const bool fin =
-        (entete[0] & 0x80) != 0;
+        const int restant =
+            timeout_ms -
+            static_cast<int>(
+                ecoule
+            );
 
-    const std::uint8_t opcode =
-        entete[0] & 0x0F;
+        if (restant <= 0)
+            return false;
 
-    const bool masque =
-        (entete[1] & 0x80) != 0;
-
-    std::uint64_t longueur =
-        entete[1] & 0x7F;
-
-    if (longueur == 126)
-    {
-        std::uint8_t etendue[2] = {};
+        std::uint8_t entete[2] = {};
 
         if (
             !recevoir_exact(
                 fd,
-                etendue,
-                sizeof(etendue),
-                timeout_ms
+                entete,
+                sizeof(entete),
+                restant
             )
         )
         {
             return false;
         }
 
-        longueur =
-            (
-                static_cast<std::uint64_t>(
-                    etendue[0]
-                ) << 8
-            ) |
-            etendue[1];
-    }
-    else if (longueur == 127)
-    {
-        std::uint8_t etendue[8] = {};
+        const bool fin =
+            (entete[0] & 0x80) != 0;
 
-        if (
-            !recevoir_exact(
-                fd,
-                etendue,
-                sizeof(etendue),
-                timeout_ms
+        const std::uint8_t opcode =
+            entete[0] & 0x0F;
+
+        const bool masque =
+            (entete[1] & 0x80) != 0;
+
+        std::uint64_t longueur =
+            entete[1] & 0x7F;
+
+        if (longueur == 126)
+        {
+            std::uint8_t etendue[2] = {};
+
+            if (
+                !recevoir_exact(
+                    fd,
+                    etendue,
+                    sizeof(etendue),
+                    restant
+                )
             )
-        )
-        {
-            return false;
-        }
+            {
+                return false;
+            }
 
-        longueur = 0;
-
-        for (const std::uint8_t octet : etendue)
-        {
             longueur =
-                (longueur << 8) |
-                static_cast<std::uint64_t>(
-                    octet
-                );
+                (
+                    static_cast<std::uint64_t>(
+                        etendue[0]
+                    ) << 8
+                ) |
+                etendue[1];
         }
-    }
+        else if (longueur == 127)
+        {
+            std::uint8_t etendue[8] = {};
 
-    if (
-        !fin ||
-        opcode != 0x02 ||
-        longueur > 1024 * 1024
-    )
-    {
-        return false;
-    }
+            if (
+                !recevoir_exact(
+                    fd,
+                    etendue,
+                    sizeof(etendue),
+                    restant
+                )
+            )
+            {
+                return false;
+            }
 
-    std::array<std::uint8_t, 4>
-        cle_masque = {};
+            longueur = 0;
 
-    if (
-        masque &&
-        !recevoir_exact(
-            fd,
-            cle_masque.data(),
-            cle_masque.size(),
-            timeout_ms
-        )
-    )
-    {
-        return false;
-    }
+            for (const std::uint8_t octet : etendue)
+            {
+                longueur =
+                    (longueur << 8) |
+                    static_cast<std::uint64_t>(
+                        octet
+                    );
+            }
+        }
 
-    payload.resize(
-        static_cast<std::size_t>(
-            longueur
-        )
-    );
+        if (longueur > 4 * 1024 * 1024)
+            return false;
 
-    if (
-        longueur > 0 &&
-        !recevoir_exact(
-            fd,
-            payload.data(),
-            payload.size(),
-            timeout_ms
-        )
-    )
-    {
-        return false;
-    }
+        std::array<std::uint8_t, 4>
+            cle_masque = {};
 
-    if (masque)
-    {
-        for (
-            std::size_t i = 0;
-            i < payload.size();
-            ++i
+        if (
+            masque &&
+            !recevoir_exact(
+                fd,
+                cle_masque.data(),
+                cle_masque.size(),
+                restant
+            )
         )
         {
-            payload[i] ^=
-                cle_masque[
-                    i %
-                    cle_masque.size()
-                ];
+            return false;
+        }
+
+        std::vector<std::uint8_t> morceau(
+            static_cast<std::size_t>(
+                longueur
+            )
+        );
+
+        if (
+            longueur > 0 &&
+            !recevoir_exact(
+                fd,
+                morceau.data(),
+                morceau.size(),
+                restant
+            )
+        )
+        {
+            return false;
+        }
+
+        if (masque)
+        {
+            for (
+                std::size_t i = 0;
+                i < morceau.size();
+                ++i
+            )
+            {
+                morceau[i] ^=
+                    cle_masque[
+                        i %
+                        cle_masque.size()
+                    ];
+            }
+        }
+
+        if (opcode == 0x08)
+            return false;
+
+        if (opcode == 0x09)
+        {
+            (void)envoyer_ws_controle(
+                fd,
+                0x0A,
+                morceau,
+                restant
+            );
+            continue;
+        }
+
+        if (opcode == 0x0A)
+            continue;
+
+        if (opcode == 0x02)
+        {
+            if (fin)
+            {
+                payload =
+                    std::move(morceau);
+                return true;
+            }
+
+            assemble =
+                std::move(morceau);
+            fragmentation = true;
+            continue;
+        }
+
+        if (
+            opcode == 0x00 &&
+            fragmentation
+        )
+        {
+            if (
+                assemble.size() +
+                    morceau.size() >
+                4 * 1024 * 1024
+            )
+            {
+                return false;
+            }
+
+            assemble.insert(
+                assemble.end(),
+                morceau.begin(),
+                morceau.end()
+            );
+
+            if (fin)
+            {
+                payload =
+                    std::move(assemble);
+                return true;
+            }
+
+            continue;
         }
     }
-
-    return true;
 }
-
 
 void ajouter_u32_le(
     std::vector<std::uint8_t>& sortie,
