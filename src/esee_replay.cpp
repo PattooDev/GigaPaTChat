@@ -2308,6 +2308,7 @@ ResultatRechercheEsee tester_recherche_native_esee(
     };
 
     std::uint32_t ticket = 3;
+    bool anomalie_next = false;
 
     for (int i = 0; i < 5; ++i)
     {
@@ -2325,6 +2326,9 @@ ResultatRechercheEsee tester_recherche_native_esee(
             )
         )
         {
+            resultat.detail =
+                "FIND_START OK, échec envoi FIND_NEXT";
+            anomalie_next = true;
             break;
         }
 
@@ -2340,6 +2344,9 @@ ResultatRechercheEsee tester_recherche_native_esee(
             )
         )
         {
+            resultat.detail =
+                "FIND_START OK, aucune réponse FIND_NEXT";
+            anomalie_next = true;
             break;
         }
 
@@ -2349,6 +2356,16 @@ ResultatRechercheEsee tester_recherche_native_esee(
         )
         {
             resultat.code = resultat_api;
+
+            std::ostringstream detail;
+            detail
+                << "FIND_NEXT terminé ou refusé : cmd="
+                << commande_api
+                << " code="
+                << resultat_api;
+
+            resultat.detail = detail.str();
+            anomalie_next = true;
             break;
         }
 
@@ -2356,6 +2373,7 @@ ResultatRechercheEsee tester_recherche_native_esee(
         {
             resultat.detail =
                 "FIND_NEXT reçu avec payload trop court";
+            anomalie_next = true;
             break;
         }
 
@@ -2398,15 +2416,18 @@ ResultatRechercheEsee tester_recherche_native_esee(
         timeout_ms
     );
 
-    resultat.code = 0;
+    if (!anomalie_next)
+    {
+        resultat.code = 0;
 
-    std::ostringstream detail;
-    detail
-        << "recherche native KP2P confirmée, "
-        << resultat.fichiers.size()
-        << " enregistrement(s) lu(s)";
+        std::ostringstream detail;
+        detail
+            << "recherche native KP2P confirmée, "
+            << resultat.fichiers.size()
+            << " enregistrement(s) lu(s)";
 
-    resultat.detail = detail.str();
+        resultat.detail = detail.str();
+    }
 
     close(fd);
     return resultat;
