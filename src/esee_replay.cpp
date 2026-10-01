@@ -2947,6 +2947,475 @@ ResultatRechercheEsee tester_recherche_native_esee(
     return resultat;
 }
 
+
+ResultatReplayEsee tester_replay_start_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int canal,
+    int type,
+    std::int64_t debut_epoch,
+    std::int64_t fin_epoch,
+    int port,
+    int timeout_ms
+)
+{
+    ResultatReplayEsee resultat;
+    resultat.code = -1;
+
+    if (
+        adresse_nvr.empty() ||
+        utilisateur.empty() ||
+        canal < 0 ||
+        type <= 0 ||
+        debut_epoch <= 0 ||
+        fin_epoch <= debut_epoch ||
+        port <= 0 ||
+        port > 65535
+    )
+    {
+        resultat.detail =
+            "paramètres REPLAY invalides";
+        return resultat;
+    }
+
+    if (
+        utilisateur.size() >= 32 ||
+        mot_de_passe.size() >= 32
+    )
+    {
+        resultat.detail =
+            "identifiants trop longs pour KP2P";
+        return resultat;
+    }
+
+    if (timeout_ms <= 0)
+        timeout_ms = 5000;
+
+    std::uint32_t sid = 0;
+
+    const int fd =
+        ouvrir_websocket_arq(
+            adresse_nvr,
+            port,
+            timeout_ms,
+            resultat.websocket,
+            resultat.arq,
+            sid,
+            resultat.detail
+        );
+
+    if (fd < 0)
+        return resultat;
+
+    if (
+        !ouvrir_iot_sur_fd(
+            fd,
+            sid,
+            timeout_ms,
+            resultat.detail
+        )
+    )
+    {
+        close(fd);
+        return resultat;
+    }
+
+    resultat.iot = true;
+
+    std::vector<std::uint8_t> utilisateur_chiffre;
+    std::vector<std::uint8_t> mot_de_passe_chiffre;
+
+    if (
+        !chiffrer_champ_auth(
+            utilisateur,
+            utilisateur_chiffre
+        ) ||
+        !chiffrer_champ_auth(
+            mot_de_passe,
+            mot_de_passe_chiffre
+        )
+    )
+    {
+        resultat.detail =
+            "échec du chiffrement des identifiants";
+        close(fd);
+        return resultat;
+    }
+
+    std::vector<std::uint8_t> auth_payload;
+    auth_payload.reserve(64);
+    auth_payload.insert(
+        auth_payload.end(),
+        utilisateur_chiffre.begin(),
+        utilisateur_chiffre.end()
+    );
+    auth_payload.insert(
+        auth_payload.end(),
+        mot_de_passe_chiffre.begin(),
+        mot_de_passe_chiffre.end()
+    );
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            1,
+            10,
+            auth_payload,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "échec envoi API_AUTH_REQ";
+        close(fd);
+        return resultat;
+    }
+
+    std::uint32_t commande_api = 0;
+    std::int32_t resultat_api = -1;
+    std::vector<std::uint8_t> payload_api;
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            payload_api,
+            timeout_ms
+        ) ||
+        commande_api != 11 ||
+        resultat_api != 0
+    )
+    {
+        resultat.code =
+            resultat_api;
+        resultat.detail =
+            "authentification KP2P refusée avant REPLAY START";
+        close(fd);
+        return resultat;
+    }
+
+    resultat.auth = true;
+
+    std::vector<std::uint8_t> replay(
+        52,
+        0
+    );
+
+    auto ecrire_u32 = [&replay](
+        std::size_t offset,
+        std::uint32_t valeur
+    )
+    {
+        replay[offset + 0] =
+            static_cast<std::uint8_t>(
+                valeur & 0xFF
+            );
+        replay[offset + 1] =
+            static_cast<std::uint8_t>(
+                (valeur >> 8) & 0xFF
+            );
+        replay[offset + 2] =
+            static_cast<std::uint8_t>(
+                (valeur >> 16) & 0xFF
+            );
+        replay[offset + 3] =
+            static_cast<std::uint8_t>(
+                (valeur >> 24) & 0xFF
+            );
+    };
+
+    ecrire_u32(0, 3);
+    ecrire_u32(4, 0);
+
+    if (canal > 0 && canal < 128)
+    {
+        const std::size_t octet =
+            8 +
+            static_cast<std::size_t>(
+                canal / 8
+            );
+
+        if (octet < 24)
+        {
+            replay[octet] |=
+                static_cast<std::uint8_t>(
+                    1U << (canal % 8)
+                );
+        }
+    }
+
+    ecrire_u32(
+        24,
+        static_cast<std::uint32_t>(
+            type
+        )
+    );
+    ecrire_u32(28, 0);
+    ecrire_u32(
+        32,
+        static_cast<std::uint32_t>(
+            debut_epoch
+        )
+    );
+    ecrire_u32(
+        36,
+        static_cast<std::uint32_t>(
+            fin_epoch
+        )
+    );
+    ecrire_u32(40, 0);
+    ecrire_u32(44, 0);
+    ecrire_u32(48, 0);
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            2,
+            40,
+            replay,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "AUTH OK, échec envoi REPLAY START";
+        close(fd);
+        return resultat;
+    }
+
+    const auto debut_attente =
+        std::chrono::steady_clock::now();
+
+    for (;;)
+    {
+        const auto ecoule =
+            std::chrono::duration_cast<
+                std::chrono::milliseconds
+            >(
+                std::chrono::steady_clock::now() -
+                debut_attente
+            ).count();
+
+        const int restant =
+            timeout_ms -
+            static_cast<int>(
+                ecoule
+            );
+
+        if (restant <= 0)
+            break;
+
+        std::vector<std::uint8_t> message;
+
+        if (
+            !recevoir_ws_binaire(
+                fd,
+                message,
+                restant
+            )
+        )
+        {
+            break;
+        }
+
+        if (
+            message.size() >= 4 &&
+            message[0] == 0xCE &&
+            message[1] == 0xFA &&
+            message[2] == 0xEF &&
+            message[3] == 0xFE
+        )
+        {
+            continue;
+        }
+
+        if (
+            message.size() < 32 ||
+            message[0] != 0xAB ||
+            message[1] != 0xBC ||
+            message[2] != 0xCD ||
+            message[3] != 0xDE
+        )
+        {
+            continue;
+        }
+
+        const EnteteNarf entete =
+            analyser_entete_narf(
+                message.data(),
+                message.size()
+            );
+
+        if (entete.valide)
+        {
+            resultat.media = true;
+            resultat.premiere_trame =
+                entete;
+
+            if (resultat.demarrage)
+                break;
+
+            continue;
+        }
+
+        const std::uint32_t longueur_iot =
+            lire_u32_le(
+                message.data() + 28
+            );
+
+        if (
+            longueur_iot < 24 ||
+            longueur_iot >
+                message.size() - 32
+        )
+        {
+            continue;
+        }
+
+        const std::uint8_t* p =
+            message.data() + 32;
+
+        if (
+            lire_u32_le(p) !=
+                0x4B503250
+        )
+        {
+            continue;
+        }
+
+        const std::uint32_t cmd =
+            lire_u32_le(
+                p + 12
+            );
+
+        const std::int32_t code =
+            static_cast<std::int32_t>(
+                lire_u32_le(
+                    p + 16
+                )
+            );
+
+        const std::uint32_t taille_api =
+            lire_u32_le(
+                p + 20
+            );
+
+        if (cmd != 41)
+            continue;
+
+        resultat.code =
+            code;
+
+        std::uint32_t sous_commande = 0;
+
+        if (
+            taille_api >= 4 &&
+            longueur_iot >= 28
+        )
+        {
+            sous_commande =
+                lire_u32_le(
+                    p + 24
+                );
+        }
+
+        if (
+            code == 0 &&
+            (
+                taille_api < 4 ||
+                sous_commande == 3
+            )
+        )
+        {
+            resultat.demarrage = true;
+
+            if (resultat.media)
+                break;
+        }
+        else
+        {
+            std::ostringstream detail;
+            detail
+                << "REPLAY START refusé ou inattendu : cmd="
+                << cmd
+                << " code="
+                << code
+                << " sous-commande="
+                << sous_commande;
+
+            resultat.detail =
+                detail.str();
+
+            break;
+        }
+    }
+
+    if (resultat.demarrage)
+    {
+        std::vector<std::uint8_t> stop(
+            52,
+            0
+        );
+
+        stop[0] = 2;
+
+        (void)envoyer_api(
+            fd,
+            sid,
+            3,
+            40,
+            stop,
+            1000
+        );
+    }
+
+    if (
+        resultat.demarrage &&
+        resultat.media
+    )
+    {
+        resultat.code = 0;
+
+        std::ostringstream detail;
+        detail
+            << "REPLAY START confirmé + première trame média";
+
+        if (!resultat.premiere_trame.codec.empty())
+        {
+            detail
+                << " ("
+                << resultat.premiere_trame.codec
+                << ")";
+        }
+
+        resultat.detail =
+            detail.str();
+    }
+    else if (
+        resultat.demarrage &&
+        resultat.detail.empty()
+    )
+    {
+        resultat.detail =
+            "REPLAY START confirmé, aucune trame média détectée dans le délai";
+    }
+    else if (
+        !resultat.demarrage &&
+        resultat.detail.empty()
+    )
+    {
+        resultat.detail =
+            "aucune réponse REPLAY START exploitable";
+    }
+
+    close(fd);
+    return resultat;
+}
+
 EnteteNarf analyser_entete_narf(
     const std::uint8_t* donnees,
     std::size_t taille
