@@ -15,6 +15,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <openssl/evp.h>
+
 namespace
 {
 
@@ -1003,6 +1005,278 @@ int ouvrir_websocket_arq(
     return fd;
 }
 
+
+bool ouvrir_iot_sur_fd(
+    int fd,
+    std::uint32_t sid,
+    int timeout_ms,
+    std::string& detail
+)
+{
+    std::vector<std::uint8_t> payload_ouverture;
+
+    ajouter_u32_le(payload_ouverture, sid);
+    ajouter_u32_le(payload_ouverture, 0);
+
+    if (!envoyer_iot(fd, 20, sid, payload_ouverture, timeout_ms))
+    {
+        detail = "ARQ OK, échec envoi IOT_OPEN_REQ";
+        return false;
+    }
+
+    std::uint32_t commande = 0;
+    std::int32_t erreur = 0;
+    std::vector<std::uint8_t> payload;
+
+    if (!recevoir_iot(fd, commande, erreur, payload, timeout_ms))
+    {
+        detail = "ARQ OK, aucune réponse IOT";
+        return false;
+    }
+
+    if (commande != 21 || erreur != 0)
+    {
+        std::ostringstream sortie;
+        sortie
+            << "réponse IOT inattendue : cmd="
+            << commande
+            << " erreur="
+            << erreur;
+        detail = sortie.str();
+        return false;
+    }
+
+    detail = "IOT_OPEN confirmé";
+    return true;
+}
+
+bool chiffrer_champ_auth(
+    const std::string& texte,
+    std::vector<std::uint8_t>& sortie
+)
+{
+    if (texte.size() >= 32)
+        return false;
+
+    static constexpr unsigned char cle[16] =
+    {
+        '~', '!', 'J', 'U',
+        'A', 'N', '*', '&',
+        'V', 'i', 's', 'i',
+        'o', 'n', '-', '='
+    };
+
+    std::array<unsigned char, 32> entree = {};
+    std::memcpy(
+        entree.data(),
+        texte.data(),
+        texte.size()
+    );
+
+    EVP_CIPHER_CTX* contexte =
+        EVP_CIPHER_CTX_new();
+
+    if (!contexte)
+        return false;
+
+    std::array<unsigned char, 48> tampon = {};
+    int ecrits = 0;
+    int final = 0;
+
+    const bool succes =
+        EVP_EncryptInit_ex(
+            contexte,
+            EVP_aes_128_ecb(),
+            nullptr,
+            cle,
+            nullptr
+        ) == 1 &&
+        EVP_CIPHER_CTX_set_padding(
+            contexte,
+            0
+        ) == 1 &&
+        EVP_EncryptUpdate(
+            contexte,
+            tampon.data(),
+            &ecrits,
+            entree.data(),
+            static_cast<int>(entree.size())
+        ) == 1 &&
+        EVP_EncryptFinal_ex(
+            contexte,
+            tampon.data() + ecrits,
+            &final
+        ) == 1;
+
+    EVP_CIPHER_CTX_free(contexte);
+
+    if (!succes || ecrits + final != 32)
+        return false;
+
+    sortie.assign(
+        tampon.begin(),
+        tampon.begin() + 32
+    );
+
+    return true;
+}
+
+std::vector<std::uint8_t> fabriquer_paquet_api(
+    std::uint32_t ticket,
+    std::uint32_t commande,
+    const std::vector<std::uint8_t>& payload,
+    std::int32_t resultat = 0
+)
+{
+    std::vector<std::uint8_t> paquet;
+    paquet.reserve(24 + payload.size());
+
+    ajouter_u32_le(paquet, 0x4B503250);
+    ajouter_u32_le(paquet, 1);
+    ajouter_u32_le(paquet, ticket);
+    ajouter_u32_le(paquet, commande);
+    ajouter_u32_le(
+        paquet,
+        static_cast<std::uint32_t>(
+            resultat
+        )
+    );
+    ajouter_u32_le(
+        paquet,
+        static_cast<std::uint32_t>(
+            payload.size()
+        )
+    );
+
+    paquet.insert(
+        paquet.end(),
+        payload.begin(),
+        payload.end()
+    );
+
+    return paquet;
+}
+
+bool envoyer_api(
+    int fd,
+    std::uint32_t sid,
+    std::uint32_t ticket,
+    std::uint32_t commande,
+    const std::vector<std::uint8_t>& payload,
+    int timeout_ms
+)
+{
+    return envoyer_iot(
+        fd,
+        19,
+        sid,
+        fabriquer_paquet_api(
+            ticket,
+            commande,
+            payload
+        ),
+        timeout_ms
+    );
+}
+
+bool recevoir_api(
+    int fd,
+    std::uint32_t& commande_api,
+    std::int32_t& resultat_api,
+    std::vector<std::uint8_t>& payload_api,
+    int timeout_ms
+)
+{
+    const auto debut =
+        std::chrono::steady_clock::now();
+
+    for (;;)
+    {
+        const auto ecoule =
+            std::chrono::duration_cast<
+                std::chrono::milliseconds
+            >(
+                std::chrono::steady_clock::now() -
+                debut
+            ).count();
+
+        const int restant =
+            timeout_ms -
+            static_cast<int>(ecoule);
+
+        if (restant <= 0)
+            return false;
+
+        std::uint32_t commande_iot = 0;
+        std::int32_t erreur_iot = 0;
+        std::vector<std::uint8_t> payload_iot;
+
+        if (!recevoir_iot(
+                fd,
+                commande_iot,
+                erreur_iot,
+                payload_iot,
+                restant
+            ))
+        {
+            return false;
+        }
+
+        if (
+            erreur_iot != 0 ||
+            (
+                commande_iot != 19 &&
+                commande_iot != 43
+            ) ||
+            payload_iot.size() < 24
+        )
+        {
+            continue;
+        }
+
+        if (
+            lire_u32_le(
+                payload_iot.data()
+            ) != 0x4B503250
+        )
+        {
+            continue;
+        }
+
+        commande_api =
+            lire_u32_le(
+                payload_iot.data() + 12
+            );
+
+        resultat_api =
+            static_cast<std::int32_t>(
+                lire_u32_le(
+                    payload_iot.data() + 16
+                )
+            );
+
+        const std::uint32_t longueur =
+            lire_u32_le(
+                payload_iot.data() + 20
+            );
+
+        if (
+            longueur >
+            payload_iot.size() - 24
+        )
+        {
+            return false;
+        }
+
+        payload_api.assign(
+            payload_iot.begin() + 24,
+            payload_iot.begin() + 24 + longueur
+        );
+
+        return true;
+    }
+}
+
 } // namespace
 
 ResultatSondeEsee sonder_service_esee(
@@ -1340,6 +1614,178 @@ ResultatSessionIotEsee tester_session_iot_esee(
             << commande
             << " erreur="
             << erreur;
+
+        resultat.detail =
+            detail.str();
+    }
+
+    close(fd);
+    return resultat;
+}
+
+
+ResultatAuthEsee tester_auth_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int port,
+    int timeout_ms
+)
+{
+    ResultatAuthEsee resultat;
+    resultat.code = -1;
+
+    if (
+        adresse_nvr.empty() ||
+        utilisateur.empty() ||
+        port <= 0 ||
+        port > 65535
+    )
+    {
+        resultat.detail =
+            "paramètres invalides";
+        return resultat;
+    }
+
+    if (
+        utilisateur.size() >= 32 ||
+        mot_de_passe.size() >= 32
+    )
+    {
+        resultat.detail =
+            "identifiants trop longs pour KP2P";
+        return resultat;
+    }
+
+    if (timeout_ms <= 0)
+        timeout_ms = 3000;
+
+    std::uint32_t sid = 0;
+
+    const int fd =
+        ouvrir_websocket_arq(
+            adresse_nvr,
+            port,
+            timeout_ms,
+            resultat.websocket,
+            resultat.arq,
+            sid,
+            resultat.detail
+        );
+
+    if (fd < 0)
+        return resultat;
+
+    if (
+        !ouvrir_iot_sur_fd(
+            fd,
+            sid,
+            timeout_ms,
+            resultat.detail
+        )
+    )
+    {
+        close(fd);
+        return resultat;
+    }
+
+    resultat.iot = true;
+
+    std::vector<std::uint8_t>
+        utilisateur_chiffre;
+    std::vector<std::uint8_t>
+        mot_de_passe_chiffre;
+
+    if (
+        !chiffrer_champ_auth(
+            utilisateur,
+            utilisateur_chiffre
+        ) ||
+        !chiffrer_champ_auth(
+            mot_de_passe,
+            mot_de_passe_chiffre
+        )
+    )
+    {
+        resultat.detail =
+            "échec du chiffrement des identifiants";
+        close(fd);
+        return resultat;
+    }
+
+    std::vector<std::uint8_t> auth_payload;
+    auth_payload.reserve(64);
+
+    auth_payload.insert(
+        auth_payload.end(),
+        utilisateur_chiffre.begin(),
+        utilisateur_chiffre.end()
+    );
+
+    auth_payload.insert(
+        auth_payload.end(),
+        mot_de_passe_chiffre.begin(),
+        mot_de_passe_chiffre.end()
+    );
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            1,
+            10,
+            auth_payload,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "IOT OK, échec envoi API_AUTH_REQ";
+        close(fd);
+        return resultat;
+    }
+
+    std::uint32_t commande_api = 0;
+    std::int32_t resultat_api = -1;
+    std::vector<std::uint8_t> reponse_payload;
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            reponse_payload,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "IOT OK, aucune réponse API_AUTH_RSP";
+        close(fd);
+        return resultat;
+    }
+
+    resultat.code =
+        resultat_api;
+
+    if (
+        commande_api == 11 &&
+        resultat_api == 0
+    )
+    {
+        resultat.auth = true;
+        resultat.detail =
+            "WebSocket + ARQ + IOT + authentification KP2P confirmés";
+    }
+    else
+    {
+        std::ostringstream detail;
+
+        detail
+            << "authentification refusée ou réponse inattendue : cmd="
+            << commande_api
+            << " code="
+            << resultat_api;
 
         resultat.detail =
             detail.str();
