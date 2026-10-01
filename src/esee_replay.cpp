@@ -19,6 +19,8 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <ctime>
+#include <cstdio>
 #include <sstream>
 #include <array>
 #include <iterator>
@@ -2003,6 +2005,407 @@ ResultatAuthEsee tester_auth3_esee(
         resultat.detail =
             detail.str();
     }
+
+    close(fd);
+    return resultat;
+}
+
+
+ResultatRechercheEsee tester_recherche_native_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int canal,
+    int type,
+    int port,
+    int timeout_ms
+)
+{
+    ResultatRechercheEsee resultat;
+    resultat.code = -1;
+
+    if (
+        adresse_nvr.empty() ||
+        utilisateur.empty() ||
+        canal < 0 ||
+        type < 0 ||
+        port <= 0 ||
+        port > 65535
+    )
+    {
+        resultat.detail = "paramètres invalides";
+        return resultat;
+    }
+
+    if (
+        utilisateur.size() >= 32 ||
+        mot_de_passe.size() >= 32
+    )
+    {
+        resultat.detail =
+            "identifiants trop longs pour KP2P";
+        return resultat;
+    }
+
+    if (timeout_ms <= 0)
+        timeout_ms = 3000;
+
+    std::uint32_t sid = 0;
+
+    const int fd =
+        ouvrir_websocket_arq(
+            adresse_nvr,
+            port,
+            timeout_ms,
+            resultat.websocket,
+            resultat.arq,
+            sid,
+            resultat.detail
+        );
+
+    if (fd < 0)
+        return resultat;
+
+    if (
+        !ouvrir_iot_sur_fd(
+            fd,
+            sid,
+            timeout_ms,
+            resultat.detail
+        )
+    )
+    {
+        close(fd);
+        return resultat;
+    }
+
+    resultat.iot = true;
+
+    std::vector<std::uint8_t> utilisateur_chiffre;
+    std::vector<std::uint8_t> mot_de_passe_chiffre;
+
+    if (
+        !chiffrer_champ_auth(
+            utilisateur,
+            utilisateur_chiffre
+        ) ||
+        !chiffrer_champ_auth(
+            mot_de_passe,
+            mot_de_passe_chiffre
+        )
+    )
+    {
+        resultat.detail =
+            "échec du chiffrement des identifiants";
+        close(fd);
+        return resultat;
+    }
+
+    std::vector<std::uint8_t> auth_payload;
+    auth_payload.reserve(64);
+    auth_payload.insert(
+        auth_payload.end(),
+        utilisateur_chiffre.begin(),
+        utilisateur_chiffre.end()
+    );
+    auth_payload.insert(
+        auth_payload.end(),
+        mot_de_passe_chiffre.begin(),
+        mot_de_passe_chiffre.end()
+    );
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            1,
+            10,
+            auth_payload,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "échec envoi API_AUTH_REQ";
+        close(fd);
+        return resultat;
+    }
+
+    std::uint32_t commande_api = 0;
+    std::int32_t resultat_api = -1;
+    std::vector<std::uint8_t> payload_api;
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            payload_api,
+            timeout_ms
+        ) ||
+        commande_api != 11 ||
+        resultat_api != 0
+    )
+    {
+        resultat.code = resultat_api;
+        resultat.detail =
+            "authentification KP2P refusée avant recherche";
+        close(fd);
+        return resultat;
+    }
+
+    resultat.auth = true;
+    resultat.code = 0;
+
+    const std::time_t maintenant =
+        std::time(nullptr);
+
+    std::tm locale = {};
+
+    if (!localtime_r(&maintenant, &locale))
+    {
+        resultat.detail =
+            "impossible de déterminer la date locale";
+        close(fd);
+        return resultat;
+    }
+
+    std::vector<std::uint8_t> find_start;
+    find_start.reserve(56);
+
+    ajouter_u32_le(
+        find_start,
+        static_cast<std::uint32_t>(canal)
+    );
+    ajouter_u32_le(
+        find_start,
+        static_cast<std::uint32_t>(type)
+    );
+
+    auto ajouter_date = [&find_start](
+        std::uint32_t annee,
+        std::uint32_t mois,
+        std::uint32_t jour,
+        std::uint32_t heure,
+        std::uint32_t minute,
+        std::uint32_t seconde
+    )
+    {
+        ajouter_u32_le(find_start, annee);
+        ajouter_u32_le(find_start, mois);
+        ajouter_u32_le(find_start, jour);
+        ajouter_u32_le(find_start, heure);
+        ajouter_u32_le(find_start, minute);
+        ajouter_u32_le(find_start, seconde);
+    };
+
+    const std::uint32_t annee =
+        static_cast<std::uint32_t>(
+            locale.tm_year + 1900
+        );
+    const std::uint32_t mois =
+        static_cast<std::uint32_t>(
+            locale.tm_mon + 1
+        );
+    const std::uint32_t jour =
+        static_cast<std::uint32_t>(
+            locale.tm_mday
+        );
+
+    ajouter_date(
+        annee,
+        mois,
+        jour,
+        0,
+        0,
+        0
+    );
+
+    ajouter_date(
+        annee,
+        mois,
+        jour,
+        23,
+        59,
+        59
+    );
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            2,
+            90,
+            find_start,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "AUTH OK, échec envoi FIND_START";
+        close(fd);
+        return resultat;
+    }
+
+    payload_api.clear();
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            payload_api,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "AUTH OK, aucune réponse FIND_START";
+        close(fd);
+        return resultat;
+    }
+
+    resultat.code = resultat_api;
+
+    if (
+        commande_api != 91 ||
+        resultat_api != 0
+    )
+    {
+        std::ostringstream detail;
+        detail
+            << "FIND_START refusé ou inattendu : cmd="
+            << commande_api
+            << " code="
+            << resultat_api;
+        resultat.detail = detail.str();
+        close(fd);
+        return resultat;
+    }
+
+    resultat.recherche = true;
+
+    auto formater_date = [](
+        const std::uint8_t* p
+    )
+    {
+        char tampon[64] = {};
+
+        std::snprintf(
+            tampon,
+            sizeof(tampon),
+            "%04u-%02u-%02u %02u:%02u:%02u",
+            lire_u32_le(p + 0),
+            lire_u32_le(p + 4),
+            lire_u32_le(p + 8),
+            lire_u32_le(p + 12),
+            lire_u32_le(p + 16),
+            lire_u32_le(p + 20)
+        );
+
+        return std::string(tampon);
+    };
+
+    std::uint32_t ticket = 3;
+
+    for (int i = 0; i < 5; ++i)
+    {
+        std::vector<std::uint8_t> next_payload;
+        ajouter_u32_le(next_payload, 0);
+
+        if (
+            !envoyer_api(
+                fd,
+                sid,
+                ticket++,
+                100,
+                next_payload,
+                timeout_ms
+            )
+        )
+        {
+            break;
+        }
+
+        payload_api.clear();
+
+        if (
+            !recevoir_api(
+                fd,
+                commande_api,
+                resultat_api,
+                payload_api,
+                timeout_ms
+            )
+        )
+        {
+            break;
+        }
+
+        if (
+            commande_api != 101 ||
+            resultat_api != 0
+        )
+        {
+            resultat.code = resultat_api;
+            break;
+        }
+
+        if (payload_api.size() < 60)
+        {
+            resultat.detail =
+                "FIND_NEXT reçu avec payload trop court";
+            break;
+        }
+
+        FichierRechercheEsee fichier;
+        fichier.canal =
+            lire_u32_le(
+                payload_api.data() + 0
+            );
+        fichier.type =
+            lire_u32_le(
+                payload_api.data() + 4
+            );
+        fichier.taille =
+            lire_u32_le(
+                payload_api.data() + 8
+            );
+        fichier.debut =
+            formater_date(
+                payload_api.data() + 12
+            );
+        fichier.fin =
+            formater_date(
+                payload_api.data() + 36
+            );
+
+        resultat.fichiers.push_back(
+            std::move(fichier)
+        );
+    }
+
+    std::vector<std::uint8_t> stop_payload;
+    ajouter_u32_le(stop_payload, 0);
+
+    (void)envoyer_api(
+        fd,
+        sid,
+        ticket,
+        110,
+        stop_payload,
+        timeout_ms
+    );
+
+    resultat.code = 0;
+
+    std::ostringstream detail;
+    detail
+        << "recherche native KP2P confirmée, "
+        << resultat.fichiers.size()
+        << " enregistrement(s) lu(s)";
+
+    resultat.detail = detail.str();
 
     close(fd);
     return resultat;
