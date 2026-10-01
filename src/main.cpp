@@ -1230,6 +1230,179 @@ int main()
         return 1;
     }
 
+    const char* mode_replay_esee =
+        std::getenv("GIGAPATCHAT_ESEE_REPLAY");
+
+    if (
+        mode_replay_esee &&
+        std::string(mode_replay_esee) == "1"
+    )
+    {
+        std::string utilisateur_replay;
+
+        std::cout
+            << "Nom d'utilisateur du NVR : ";
+
+        if (
+            !std::getline(
+                std::cin,
+                utilisateur_replay
+            ) ||
+            utilisateur_replay.empty()
+        )
+        {
+            std::cerr
+                << "Erreur : nom d'utilisateur manquant.\n";
+
+            return 1;
+        }
+
+        char* saisie_replay =
+            getpass(
+                "Mot de passe du NVR : "
+            );
+
+        if (!saisie_replay)
+        {
+            std::cerr
+                << "Erreur : lecture du mot de passe impossible.\n";
+
+            return 1;
+        }
+
+        const std::string mot_de_passe_replay =
+            saisie_replay;
+
+        const std::time_t maintenant_replay =
+            std::time(nullptr);
+
+        std::tm locale_replay = {};
+        localtime_r(
+            &maintenant_replay,
+            &locale_replay
+        );
+
+        char date_replay[32] = {};
+
+        std::strftime(
+            date_replay,
+            sizeof(date_replay),
+            "%Y-%m-%d",
+            &locale_replay
+        );
+
+        std::vector<SessionNVR> sessions_replay;
+        int total_http_replay = 0;
+
+        const bool http_replay_ok =
+            rechercher_archives_nvr(
+                adresse_nvr,
+                utilisateur_replay,
+                mot_de_passe_replay,
+                3,
+                15,
+                date_replay,
+                "00:00:00",
+                "23:59:59",
+                sessions_replay,
+                total_http_replay
+            );
+
+        if (
+            !http_replay_ok ||
+            sessions_replay.empty()
+        )
+        {
+            std::cerr
+                << "[HTTP] Impossible de choisir une archive réelle pour REPLAY.\n";
+
+            return 9;
+        }
+
+        const SessionNVR& reference_replay =
+            sessions_replay.front();
+
+        std::cout
+            << "\n[HTTP] Archive choisie pour REPLAY natif :\n"
+            << "[HTTP] caméra "
+            << reference_replay.canal + 1
+            << " | type "
+            << reference_replay.type
+            << " | début="
+            << reference_replay.debut
+            << " | fin="
+            << reference_replay.fin
+            << "\n";
+
+        std::cout
+            << "\n[EseeCloud] Test REPLAY START KP2P expérimental...\n";
+
+        const ResultatReplayEsee resultat =
+            tester_replay_start_esee(
+                adresse_nvr,
+                utilisateur_replay,
+                mot_de_passe_replay,
+                reference_replay.canal,
+                reference_replay.type,
+                reference_replay.debut,
+                reference_replay.fin,
+                10000,
+                5000
+            );
+
+        std::cout
+            << "[EseeCloud] WebSocket : "
+            << (resultat.websocket ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] ARQ/KP2P   : "
+            << (resultat.arq ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] IOT_OPEN   : "
+            << (resultat.iot ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] AUTH       : "
+            << (resultat.auth ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] REPLAY     : "
+            << (resultat.demarrage ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] MEDIA      : "
+            << (resultat.media ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] Code       : "
+            << resultat.code
+            << "\n"
+            << "[EseeCloud] Détail     : "
+            << resultat.detail
+            << "\n";
+
+        if (resultat.media)
+        {
+            std::cout
+                << "[EseeCloud] Codec      : "
+                << resultat.premiere_trame.codec
+                << "\n"
+                << "[EseeCloud] Payload    : "
+                << resultat.premiere_trame.taille_payload
+                << " octets\n"
+                << "[EseeCloud] Timestamp  : "
+                << resultat.premiere_trame.timestamp_ms
+                << " ms\n"
+                << "[EseeCloud] Champs     : "
+                << resultat.premiere_trame.champ_120
+                << " / "
+                << resultat.premiere_trame.champ_124
+                << " / "
+                << resultat.premiere_trame.champ_128
+                << "\n";
+        }
+
+        return
+            resultat.demarrage
+                ? 0
+                : 10;
+    }
+
     const char* mode_find_esee =
         std::getenv("GIGAPATCHAT_ESEE_FIND");
 
