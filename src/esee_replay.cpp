@@ -3249,6 +3249,7 @@ ResultatReplayEsee tester_replay_start_esee(
     }
 
     resultat.auth = true;
+    resultat.detail.clear();
 
     std::vector<std::uint8_t> replay(
         52,
@@ -3341,6 +3342,10 @@ ResultatReplayEsee tester_replay_start_esee(
     const auto debut_attente =
         std::chrono::steady_clock::now();
 
+    std::size_t messages_recus = 0;
+    std::uint32_t premiere_commande_iot = 0;
+    std::string premiere_magie_payload;
+
     for (;;)
     {
         const auto ecoule =
@@ -3395,6 +3400,53 @@ ResultatReplayEsee tester_replay_start_esee(
             continue;
         }
 
+        ++messages_recus;
+
+        const std::uint32_t commande_iot =
+            lire_u32_le(
+                message.data() + 4
+            );
+
+        if (premiere_commande_iot == 0)
+        {
+            premiere_commande_iot =
+                commande_iot;
+        }
+
+        if (
+            premiere_magie_payload.empty() &&
+            message.size() >= 36
+        )
+        {
+            const char a =
+                static_cast<char>(message[32]);
+            const char b =
+                static_cast<char>(message[33]);
+            const char d =
+                static_cast<char>(message[34]);
+            const char e =
+                static_cast<char>(message[35]);
+
+            if (
+                std::isprint(
+                    static_cast<unsigned char>(a)
+                ) &&
+                std::isprint(
+                    static_cast<unsigned char>(b)
+                ) &&
+                std::isprint(
+                    static_cast<unsigned char>(d)
+                ) &&
+                std::isprint(
+                    static_cast<unsigned char>(e)
+                )
+            )
+            {
+                premiere_magie_payload =
+                    std::string{a, b, d, e};
+            }
+        }
+
         const EnteteNarf entete =
             analyser_entete_narf(
                 message.data(),
@@ -3404,13 +3456,44 @@ ResultatReplayEsee tester_replay_start_esee(
         if (entete.valide)
         {
             resultat.media = true;
+            resultat.demarrage = true;
+            resultat.code = 0;
             resultat.premiere_trame =
                 entete;
+            break;
+        }
 
-            if (resultat.demarrage)
+        if (message.size() >= 36)
+        {
+            const std::uint32_t magie_frame =
+                lire_u32_le(
+                    message.data() + 32
+                );
+
+            if (
+                magie_frame == 0x4652414D ||
+                magie_frame == 0x4652414E
+            )
+            {
+                resultat.media = true;
+                resultat.demarrage = true;
+                resultat.code = 0;
+
+                std::ostringstream detail;
+                detail
+                    << "REPLAY actif : trame média "
+                    << (
+                        magie_frame == 0x4652414E
+                            ? "NARF"
+                            : "MARF"
+                    )
+                    << " reçue";
+
+                resultat.detail =
+                    detail.str();
+
                 break;
-
-            continue;
+            }
         }
 
         const std::uint32_t longueur_iot =
@@ -3474,35 +3557,41 @@ ResultatReplayEsee tester_replay_start_esee(
                 );
         }
 
-        if (
-            code == 0 &&
-            (
-                taille_api < 4 ||
-                sous_commande == 3
-            )
-        )
+        if (code == 0)
         {
             resultat.demarrage = true;
 
-            if (resultat.media)
-                break;
-        }
-        else
-        {
             std::ostringstream detail;
             detail
-                << "REPLAY START refusé ou inattendu : cmd="
-                << cmd
-                << " code="
-                << code
-                << " sous-commande="
-                << sous_commande;
+                << "réponse REPLAY_RSP acceptée";
+
+            if (taille_api >= 4)
+            {
+                detail
+                    << " (sous-commande="
+                    << sous_commande
+                    << ")";
+            }
 
             resultat.detail =
                 detail.str();
 
-            break;
+            continue;
         }
+
+        std::ostringstream detail;
+        detail
+            << "REPLAY START refusé : cmd="
+            << cmd
+            << " code="
+            << code
+            << " sous-commande="
+            << sous_commande;
+
+        resultat.detail =
+            detail.str();
+
+        break;
     }
 
     if (resultat.demarrage)
@@ -3526,14 +3615,15 @@ ResultatReplayEsee tester_replay_start_esee(
 
     if (
         resultat.demarrage &&
-        resultat.media
+        resultat.media &&
+        resultat.premiere_trame.valide
     )
     {
         resultat.code = 0;
 
         std::ostringstream detail;
         detail
-            << "REPLAY START confirmé + première trame média";
+            << "REPLAY START confirmé par première trame NARF";
 
         if (!resultat.premiere_trame.codec.empty())
         {
@@ -3548,19 +3638,49 @@ ResultatReplayEsee tester_replay_start_esee(
     }
     else if (
         resultat.demarrage &&
-        resultat.detail.empty()
+        !resultat.media
     )
     {
+        std::ostringstream detail;
+        detail
+            << "REPLAY_RSP accepté, mais aucune trame média détectée dans le délai"
+            << " ; messages="
+            << messages_recus
+            << " ; première commande IOT="
+            << premiere_commande_iot;
+
+        if (!premiere_magie_payload.empty())
+        {
+            detail
+                << " ; magie payload="
+                << premiere_magie_payload;
+        }
+
         resultat.detail =
-            "REPLAY START confirmé, aucune trame média détectée dans le délai";
+            detail.str();
     }
     else if (
         !resultat.demarrage &&
         resultat.detail.empty()
     )
     {
+        std::ostringstream detail;
+        detail
+            << "aucune confirmation REPLAY exploitable"
+            << " ; messages="
+            << messages_recus
+            << " ; première commande IOT="
+            << premiere_commande_iot;
+
+        if (!premiere_magie_payload.empty())
+        {
+            detail
+                << " ; magie payload="
+                << premiere_magie_payload;
+        }
+
         resultat.detail =
-            "aucune réponse REPLAY START exploitable";
+            detail.str();
     }
 
     close(fd);
