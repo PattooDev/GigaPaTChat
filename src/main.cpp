@@ -1274,10 +1274,10 @@ int main()
             saisie_find;
 
         std::cout
-            << "\n[EseeCloud] Recherche native KP2P expérimentale...\n";
+            << "\n[EseeCloud] Recherche REPLAY native KP2P expérimentale...\n";
 
         const ResultatRechercheEsee resultat =
-            tester_recherche_native_esee(
+            tester_recherche_replay_esee(
                 adresse_nvr,
                 utilisateur_find,
                 mot_de_passe_find,
@@ -1300,7 +1300,7 @@ int main()
             << "[EseeCloud] AUTH       : "
             << (resultat.auth ? "OK" : "ECHEC")
             << "\n"
-            << "[EseeCloud] FIND       : "
+            << "[EseeCloud] SEARCH     : "
             << (resultat.recherche ? "OK" : "ECHEC")
             << "\n"
             << "[EseeCloud] Code       : "
