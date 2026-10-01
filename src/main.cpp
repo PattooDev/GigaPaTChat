@@ -1230,6 +1230,87 @@ int main()
         return 1;
     }
 
+    const char* mode_auth3_esee =
+        std::getenv("GIGAPATCHAT_ESEE_AUTH3");
+
+    if (
+        mode_auth3_esee &&
+        std::string(mode_auth3_esee) == "1"
+    )
+    {
+        std::string utilisateur_auth3;
+
+        std::cout
+            << "Nom d'utilisateur du NVR : ";
+
+        if (
+            !std::getline(
+                std::cin,
+                utilisateur_auth3
+            ) ||
+            utilisateur_auth3.empty()
+        )
+        {
+            std::cerr
+                << "Erreur : nom d'utilisateur manquant.\n";
+
+            return 1;
+        }
+
+        char* saisie_auth3 =
+            getpass(
+                "Mot de passe du NVR : "
+            );
+
+        if (!saisie_auth3)
+        {
+            std::cerr
+                << "Erreur : lecture du mot de passe impossible.\n";
+
+            return 1;
+        }
+
+        const std::string mot_de_passe_auth3 =
+            saisie_auth3;
+
+        std::cout
+            << "\n[EseeCloud] Test AUTH3 KP2P expérimental...\n";
+
+        const ResultatAuthEsee resultat =
+            tester_auth3_esee(
+                adresse_nvr,
+                utilisateur_auth3,
+                mot_de_passe_auth3,
+                10000,
+                3000
+            );
+
+        std::cout
+            << "[EseeCloud] WebSocket : "
+            << (resultat.websocket ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] ARQ/KP2P   : "
+            << (resultat.arq ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] IOT_OPEN   : "
+            << (resultat.iot ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] AUTH3      : "
+            << (resultat.auth ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] Code       : "
+            << resultat.code
+            << "\n"
+            << "[EseeCloud] Détail     : "
+            << resultat.detail
+            << "\n";
+
+        return
+            resultat.auth
+                ? 0
+                : 6;
+    }
+
     const char* mode_auth_esee =
         std::getenv("GIGAPATCHAT_ESEE_AUTH");
 
