@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 struct ResultatSondeEsee
 {
@@ -34,6 +35,28 @@ struct ResultatAuthEsee
     bool auth = false;
     int code = 0;
     std::string detail;
+};
+
+
+struct FichierRechercheEsee
+{
+    std::uint32_t canal = 0;
+    std::uint32_t type = 0;
+    std::uint32_t taille = 0;
+    std::string debut;
+    std::string fin;
+};
+
+struct ResultatRechercheEsee
+{
+    bool websocket = false;
+    bool arq = false;
+    bool iot = false;
+    bool auth = false;
+    bool recherche = false;
+    int code = 0;
+    std::string detail;
+    std::vector<FichierRechercheEsee> fichiers;
 };
 
 struct EnteteNarf
@@ -77,6 +100,17 @@ ResultatAuthEsee tester_auth3_esee(
     const std::string& adresse_nvr,
     const std::string& utilisateur,
     const std::string& mot_de_passe,
+    int port = 10000,
+    int timeout_ms = 3000
+);
+
+
+ResultatRechercheEsee tester_recherche_native_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int canal = 0,
+    int type = 15,
     int port = 10000,
     int timeout_ms = 3000
 );
