@@ -113,7 +113,9 @@ ResultatRechercheEsee tester_recherche_replay_esee(
     int canal = 0,
     int type = 15,
     int port = 10000,
-    int timeout_ms = 3000
+    int timeout_ms = 3000,
+    std::int64_t debut_epoch = 0,
+    std::int64_t fin_epoch = 0
 );
 
 ResultatRechercheEsee tester_recherche_native_esee(
