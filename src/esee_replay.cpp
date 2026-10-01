@@ -24,6 +24,7 @@
 #include <cstring>
 #include <ctime>
 #include <cstdio>
+#include <iomanip>
 #include <sstream>
 #include <thread>
 #include <algorithm>
@@ -3601,6 +3602,80 @@ ResultatReplayEsee tester_replay_start_esee(
                 message.size()
             );
 
+        auto memoriser_diagnostic_media =
+            [&resultat](
+                const std::vector<std::uint8_t>& brut
+            )
+        {
+            resultat.taille_message_media =
+                brut.size();
+
+            auto trouver_magic =
+                [&brut](
+                    const char* magic
+                ) -> int
+            {
+                if (!magic || brut.size() < 4)
+                    return -1;
+
+                for (
+                    std::size_t i = 0;
+                    i + 4 <= brut.size();
+                    ++i
+                )
+                {
+                    if (
+                        std::memcmp(
+                            brut.data() + i,
+                            magic,
+                            4
+                        ) == 0
+                    )
+                    {
+                        return
+                            static_cast<int>(i);
+                    }
+                }
+
+                return -1;
+            };
+
+            resultat.offset_narf =
+                trouver_magic("NARF");
+            resultat.offset_marf =
+                trouver_magic("MARF");
+
+            const std::size_t limite =
+                std::min<std::size_t>(
+                    brut.size(),
+                    160
+                );
+
+            std::ostringstream hex;
+            hex
+                << std::hex
+                << std::setfill('0');
+
+            for (
+                std::size_t i = 0;
+                i < limite;
+                ++i
+            )
+            {
+                if (i > 0)
+                    hex << ' ';
+
+                hex
+                    << std::setw(2)
+                    << static_cast<unsigned int>(
+                        brut[i]
+                    );
+            }
+
+            resultat.apercu_hex =
+                hex.str();
+        };
+
         if (entete.valide)
         {
             resultat.media = true;
@@ -3608,6 +3683,9 @@ ResultatReplayEsee tester_replay_start_esee(
             resultat.code = 0;
             resultat.premiere_trame =
                 entete;
+            memoriser_diagnostic_media(
+                message
+            );
             break;
         }
 
@@ -3627,6 +3705,10 @@ ResultatReplayEsee tester_replay_start_esee(
                 resultat.demarrage = true;
                 resultat.code = 0;
 
+                memoriser_diagnostic_media(
+                    message
+                );
+
                 std::ostringstream detail;
                 detail
                     << "REPLAY actif : trame média "
@@ -3635,7 +3717,13 @@ ResultatReplayEsee tester_replay_start_esee(
                             ? "NARF"
                             : "MARF"
                     )
-                    << " reçue";
+                    << " reçue"
+                    << " ; taille="
+                    << resultat.taille_message_media
+                    << " ; NARF@"
+                    << resultat.offset_narf
+                    << " ; MARF@"
+                    << resultat.offset_marf;
 
                 resultat.detail =
                     detail.str();
