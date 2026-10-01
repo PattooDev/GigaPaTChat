@@ -2860,7 +2860,7 @@ ResultatRechercheEsee tester_recherche_native_esee(
             lire_u32_le(
                 payload_api.data() + 4
             );
-        fichier.taille =
+        fichier.qualite =
             lire_u32_le(
                 payload_api.data() + 8
             );
