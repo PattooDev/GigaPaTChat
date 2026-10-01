@@ -82,6 +82,10 @@ struct ResultatReplayEsee
     int code = 0;
     std::string detail;
     EnteteNarf premiere_trame;
+    std::size_t taille_message_media = 0;
+    int offset_narf = -1;
+    int offset_marf = -1;
+    std::string apercu_hex;
 };
 
 
