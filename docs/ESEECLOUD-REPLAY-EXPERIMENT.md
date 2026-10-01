@@ -125,3 +125,25 @@ kp2p_rec_play_start2(...)
 ```
 
 Ces éléments serviront à la prochaine étape de rétro-ingénierie du replay natif.
+
+
+## Variante d'authentification AUTH3
+
+Le header public `include/proto.h` du dépôt `tuyungang/Automatic-Interface-Detection-Tool` documente aussi :
+
+```text
+APP_PROTO_CMD_NONCE_REQ  = 120
+APP_PROTO_CMD_NONCE_RSP  = 121
+APP_PROTO_CMD_AUTH2_REQ  = 130
+APP_PROTO_CMD_AUTH2_RSP  = 131
+APP_PROTO_CMD_AUTH3_REQ  = 140
+APP_PROTO_CMD_AUTH3_RSP  = 141
+```
+
+La structure `auth3_req_data_t` contient deux champs de 1024 octets pour le nom d'utilisateur et le mot de passe. GigaPaTChat expose donc un diagnostic séparé qui utilise uniquement les identifiants fournis par l'utilisateur, sans essai automatique de comptes :
+
+```bash
+GIGAPATCHAT_ESEE_AUTH3=1 ./build/gigapatchat
+```
+
+AUTH1 et AUTH3 restent deux chemins expérimentaux distincts afin de pouvoir comparer précisément le comportement du firmware.
