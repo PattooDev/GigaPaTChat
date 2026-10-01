@@ -364,7 +364,7 @@ bool envoyer_ws_binaire(
     int timeout_ms
 )
 {
-    if (payload.size() > 125)
+    if (payload.size() > 65535)
         return false;
 
     std::array<std::uint8_t, 4> masque = {};
@@ -381,18 +381,47 @@ bool envoyer_ws_binaire(
 
     std::vector<std::uint8_t> trame;
     trame.reserve(
-        2 +
+        4 +
         masque.size() +
         payload.size()
     );
 
     trame.push_back(0x82);
-    trame.push_back(
-        static_cast<std::uint8_t>(
-            0x80 |
-            payload.size()
-        )
-    );
+
+    if (payload.size() <= 125)
+    {
+        trame.push_back(
+            static_cast<std::uint8_t>(
+                0x80 |
+                payload.size()
+            )
+        );
+    }
+    else
+    {
+        trame.push_back(
+            static_cast<std::uint8_t>(
+                0x80 | 126
+            )
+        );
+
+        const std::uint16_t longueur =
+            static_cast<std::uint16_t>(
+                payload.size()
+            );
+
+        trame.push_back(
+            static_cast<std::uint8_t>(
+                (longueur >> 8) & 0xFF
+            )
+        );
+
+        trame.push_back(
+            static_cast<std::uint8_t>(
+                longueur & 0xFF
+            )
+        );
+    }
 
     trame.insert(
         trame.end(),
@@ -1818,6 +1847,158 @@ ResultatAuthEsee tester_auth_esee(
             detail
                 << " (KP2P_ERR_AUTH2_FAILED)";
         }
+
+        resultat.detail =
+            detail.str();
+    }
+
+    close(fd);
+    return resultat;
+}
+
+
+ResultatAuthEsee tester_auth3_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int port,
+    int timeout_ms
+)
+{
+    ResultatAuthEsee resultat;
+    resultat.code = -1;
+
+    if (
+        adresse_nvr.empty() ||
+        utilisateur.empty() ||
+        port <= 0 ||
+        port > 65535
+    )
+    {
+        resultat.detail =
+            "paramètres invalides";
+        return resultat;
+    }
+
+    if (
+        utilisateur.size() >= 1024 ||
+        mot_de_passe.size() >= 1024
+    )
+    {
+        resultat.detail =
+            "identifiants trop longs pour AUTH3";
+        return resultat;
+    }
+
+    if (timeout_ms <= 0)
+        timeout_ms = 3000;
+
+    std::uint32_t sid = 0;
+
+    const int fd =
+        ouvrir_websocket_arq(
+            adresse_nvr,
+            port,
+            timeout_ms,
+            resultat.websocket,
+            resultat.arq,
+            sid,
+            resultat.detail
+        );
+
+    if (fd < 0)
+        return resultat;
+
+    if (
+        !ouvrir_iot_sur_fd(
+            fd,
+            sid,
+            timeout_ms,
+            resultat.detail
+        )
+    )
+    {
+        close(fd);
+        return resultat;
+    }
+
+    resultat.iot = true;
+
+    std::vector<std::uint8_t> auth_payload(
+        2048,
+        0
+    );
+
+    std::memcpy(
+        auth_payload.data(),
+        utilisateur.data(),
+        utilisateur.size()
+    );
+
+    std::memcpy(
+        auth_payload.data() + 1024,
+        mot_de_passe.data(),
+        mot_de_passe.size()
+    );
+
+    if (
+        !envoyer_api(
+            fd,
+            sid,
+            1,
+            140,
+            auth_payload,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "IOT OK, échec envoi API_AUTH3_REQ";
+        close(fd);
+        return resultat;
+    }
+
+    std::uint32_t commande_api = 0;
+    std::int32_t resultat_api = -1;
+    std::vector<std::uint8_t> reponse_payload;
+
+    if (
+        !recevoir_api(
+            fd,
+            commande_api,
+            resultat_api,
+            reponse_payload,
+            timeout_ms
+        )
+    )
+    {
+        resultat.detail =
+            "IOT OK, aucune réponse API_AUTH3_RSP";
+        close(fd);
+        return resultat;
+    }
+
+    resultat.code =
+        resultat_api;
+
+    if (
+        commande_api == 141 &&
+        resultat_api == 0
+    )
+    {
+        resultat.auth = true;
+        resultat.detail =
+            "WebSocket + ARQ + IOT + AUTH3 confirmés";
+    }
+    else
+    {
+        std::ostringstream detail;
+
+        detail
+            << "AUTH3 refusée ou réponse inattendue : cmd="
+            << commande_api
+            << " code="
+            << resultat_api;
 
         resultat.detail =
             detail.str();
