@@ -42,7 +42,7 @@ struct FichierRechercheEsee
 {
     std::uint32_t canal = 0;
     std::uint32_t type = 0;
-    std::uint32_t taille = 0;
+    std::uint32_t qualite = 0;
     std::string debut;
     std::string fin;
 };
