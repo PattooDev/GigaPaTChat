@@ -1230,6 +1230,44 @@ int main()
         return 1;
     }
 
+    const char* mode_iot_esee =
+        std::getenv("GIGAPATCHAT_ESEE_IOT");
+
+    if (
+        mode_iot_esee &&
+        std::string(mode_iot_esee) == "1"
+    )
+    {
+        std::cout
+            << "\n[EseeCloud] Test d'ouverture IOT expérimental...\n";
+
+        const ResultatSessionIotEsee resultat =
+            tester_session_iot_esee(
+                adresse_nvr,
+                10000,
+                3000
+            );
+
+        std::cout
+            << "[EseeCloud] WebSocket : "
+            << (resultat.websocket ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] ARQ/KP2P   : "
+            << (resultat.arq ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] IOT_OPEN   : "
+            << (resultat.iot ? "OK" : "ECHEC")
+            << "\n"
+            << "[EseeCloud] Détail     : "
+            << resultat.detail
+            << "\n";
+
+        return
+            resultat.iot
+                ? 0
+                : 4;
+    }
+
     const char* mode_handshake_esee =
         std::getenv("GIGAPATCHAT_ESEE_HANDSHAKE");
 
