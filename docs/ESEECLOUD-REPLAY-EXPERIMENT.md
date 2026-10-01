@@ -284,3 +284,27 @@ Validation matérielle croisée HTTP -> KP2P sur le NVR Gigamedia :
 Cette validation confirme que la voie native `APP_PROTO_CMD_REPLAY_REQ/RSP 40/41` avec la sous-commande `SEARCH=1` retrouve effectivement les archives du NVR lorsque canal, type et intervalle correspondent à un enregistrement réel.
 
 Le prochain jalon est `REPLAY START` (sous-commande 3) sur ce même enregistrement, puis la réception d'une première trame de replay.
+
+
+## Diagnostic REPLAY START
+
+Le diagnostic suivant choisit d'abord une archive réelle via `recsearch`, puis lance un replay KP2P natif sur exactement le même canal, type et intervalle :
+
+```bash
+GIGAPATCHAT_ESEE_REPLAY=1 ./build/gigapatchat
+```
+
+Séquence expérimentale :
+
+```text
+HTTP recsearch -> archive réelle
+TCP -> WebSocket -> ARQ -> IOT_OPEN -> AUTH
+APP_PROTO_CMD_REPLAY_REQ (40), sous-commande START=3
+APP_PROTO_CMD_REPLAY_RSP (41)
+première trame média
+REPLAY STOP=2
+```
+
+Le test s'arrête dès la première trame média détectée. Il n'écrit aucun fichier et n'effectue encore aucun décodage FFmpeg.
+
+Le lecteur WebSocket accepte désormais les longueurs étendues 64 bits (indicateur 127), nécessaires pour les gros fragments H.265 pouvant dépasser 65 535 octets. Les références publiques `BigGecko01/EseeCloud-Raw-Exporter` et `harsh-chalo/trv-log-all-configs/CameraSDK/connector.js` documentent respectivement le transport NARF/MARF et la construction du `REPLAY START`.
