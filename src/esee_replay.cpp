@@ -19,6 +19,7 @@
 #include "esee_replay.h"
 
 #include <cerrno>
+#include <cctype>
 #include <chrono>
 #include <cstring>
 #include <ctime>
