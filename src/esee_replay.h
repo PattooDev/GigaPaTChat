@@ -11,6 +11,13 @@ struct ResultatSondeEsee
     std::string detail;
 };
 
+struct ResultatHandshakeEsee
+{
+    bool websocket = false;
+    bool arq = false;
+    std::string detail;
+};
+
 struct EnteteNarf
 {
     bool valide = false;
@@ -26,6 +33,12 @@ ResultatSondeEsee sonder_service_esee(
     const std::string& adresse_nvr,
     int port = 10000,
     int timeout_ms = 2000
+);
+
+ResultatHandshakeEsee tester_handshake_esee(
+    const std::string& adresse_nvr,
+    int port = 10000,
+    int timeout_ms = 3000
 );
 
 EnteteNarf analyser_entete_narf(
