@@ -158,3 +158,26 @@ GIGAPATCHAT_HTTP_AUTH_TEST=1 ./build/gigapatchat
 ```
 
 Le mot de passe reste saisi avec `getpass()`. Un résultat `RECSEARCH : OK` signifie que l'API HTTP du NVR accepte les identifiants, même si aucun enregistrement n'existe pour la journée.
+
+
+## Authentification KP2P confirmée sur le NVR Gigamedia
+
+Validation matérielle effectuée sur le NVR de test :
+
+```text
+WebSocket : OK
+ARQ/KP2P  : OK
+IOT_OPEN  : OK
+AUTH       : OK
+Code       : 0
+```
+
+La chaîne locale complète est donc confirmée sur le matériel :
+
+```text
+TCP -> WebSocket -> ARQ/KP2P -> IOT_OPEN -> API_AUTH_REQ/API_AUTH_RSP
+```
+
+Le compte local actuellement valide sur le NVR est `admin` avec mot de passe vide. Le compte secondaire précédemment utilisé n'est plus présent dans la configuration du NVR. Ce constat explique les précédents retours `KP2P_ERR_AUTH_FAILED (-20)`.
+
+La prochaine étape expérimentale est la recherche native des enregistrements, puis l'ouverture du replay KP2P.
