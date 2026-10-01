@@ -8,6 +8,8 @@
  *   https://github.com/meust3/home-assistant-jooan-nvr
  * - tuyungang/Automatic-Interface-Detection-Tool
  *   https://github.com/tuyungang/Automatic-Interface-Detection-Tool
+ * - harsh-chalo/trv-log-all-configs (public CameraSDK connector.js reference)
+ *   https://github.com/harsh-chalo/trv-log-all-configs
  *
  * Thanks to these authors/maintainers for making protocol research and
  * SDK reference material publicly available.
