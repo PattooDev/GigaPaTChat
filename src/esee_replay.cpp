@@ -1,3 +1,16 @@
+/*
+ * EseeCloud/KP2P interoperability work for GigaPaTChat.
+ *
+ * Public protocol references that helped this implementation:
+ * - BigGecko01/EseeCloud-Raw-Exporter
+ *   https://github.com/BigGecko01/EseeCloud-Raw-Exporter
+ * - meust3/home-assistant-jooan-nvr
+ *   https://github.com/meust3/home-assistant-jooan-nvr
+ *
+ * Thanks to their authors for publishing their reverse-engineering work.
+ * See docs/ESEECLOUD-REPLAY-EXPERIMENT.md for detailed credits and licenses.
+ */
+
 #include "esee_replay.h"
 
 #include <cerrno>
