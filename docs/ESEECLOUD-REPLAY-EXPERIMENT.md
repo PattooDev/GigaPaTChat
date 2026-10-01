@@ -230,8 +230,26 @@ GigaPaTChat conserve la même commande de diagnostic :
 GIGAPATCHAT_ESEE_FIND=1 ./build/gigapatchat
 ```
 
-Le test s'authentifie avec AUTH1, interroge la caméra 1 (canal 0), la journée courante et le type 15 (tous types), puis affiche au maximum cinq enregistrements.
+Le test s'authentifie avec AUTH1 et interroge la caméra 1 (canal 0) pour la journée courante. Comme l'interface EseeCloud publique ne propose que les types 1, 2, 4 et 8, la valeur interne 15 (« tous ») est développée en quatre requêtes REPLAY SEARCH séparées : 1=continu, 2=mouvement, 4=alarme, 8=manuel. GigaPaTChat affiche au maximum cinq enregistrements et indique le total annoncé pour chaque type.
 
 Références :
 - `tuyungang/Automatic-Interface-Detection-Tool` pour les constantes et structures KP2P ;
 - `harsh-chalo/trv-log-all-configs/CameraSDK/connector.js` comme référence publique du comportement de `find_file_start_2` et `replay_start`. Ce dépôt est crédité comme source publique de référence, sans supposer qu'il est l'auteur original du SDK minifié.
+
+
+### Validation intermédiaire sur le NVR Gigamedia
+
+Le premier essai REPLAY SEARCH a été accepté par le NVR :
+
+```text
+WebSocket : OK
+ARQ/KP2P  : OK
+IOT_OPEN  : OK
+AUTH       : OK
+SEARCH     : OK
+Code       : 0
+```
+
+Avec le type 15 envoyé directement, le NVR a répondu `0 reçu(s), 0 au total`. La comparaison avec l'interface du client EseeCloud public a montré que ce client n'envoie pas 15 : il propose uniquement 1, 2, 4 et 8. Le diagnostic a donc été corrigé pour tester ces quatre types séparément.
+
+Le dernier champ de chaque entrée de 20 octets est également documenté comme `quality`, et non comme une taille de fichier.
