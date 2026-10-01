@@ -1,6 +1,7 @@
 #include "esee_replay.h"
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <sstream>
 #include <array>
