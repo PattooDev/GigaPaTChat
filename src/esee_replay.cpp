@@ -513,7 +513,30 @@ bool recevoir_ws_binaire(
     }
     else if (longueur == 127)
     {
-        return false;
+        std::uint8_t etendue[8] = {};
+
+        if (
+            !recevoir_exact(
+                fd,
+                etendue,
+                sizeof(etendue),
+                timeout_ms
+            )
+        )
+        {
+            return false;
+        }
+
+        longueur = 0;
+
+        for (const std::uint8_t octet : etendue)
+        {
+            longueur =
+                (longueur << 8) |
+                static_cast<std::uint64_t>(
+                    octet
+                );
+        }
     }
 
     if (
