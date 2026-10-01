@@ -73,6 +73,14 @@ ResultatAuthEsee tester_auth_esee(
     int timeout_ms = 3000
 );
 
+ResultatAuthEsee tester_auth3_esee(
+    const std::string& adresse_nvr,
+    const std::string& utilisateur,
+    const std::string& mot_de_passe,
+    int port = 10000,
+    int timeout_ms = 3000
+);
+
 EnteteNarf analyser_entete_narf(
     const std::uint8_t* donnees,
     std::size_t taille
