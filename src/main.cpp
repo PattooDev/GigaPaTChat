@@ -1331,8 +1331,9 @@ int main()
                 << " -> "
                 << fichier.fin
                 << " | "
-                << fichier.taille
-                << " octets\n";
+                << "qualité "
+                << fichier.qualite
+                << "\n";
         }
 
         return
