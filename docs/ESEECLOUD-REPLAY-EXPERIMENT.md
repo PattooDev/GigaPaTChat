@@ -332,3 +332,27 @@ AUTH
 ```
 
 Le lecteur WebSocket gère également désormais les PING/PONG, la fragmentation et les longueurs étendues afin de se rapprocher du comportement du WebSocket navigateur utilisé par le SDK JavaScript.
+
+
+## Trame NARF matérielle reçue
+
+Validation sur le NVR Gigamedia :
+
+```text
+REPLAY : OK
+MEDIA  : OK
+Code   : 0
+Détail : REPLAY actif : trame média NARF reçue
+```
+
+Le replay natif est donc opérationnel jusqu'à la réception média.
+
+Le premier paquet matériel reconnu par sa magie `NARF` ne correspond toutefois pas encore exactement aux offsets du parseur initial dérivé de la référence publique : codec, taille de payload et timestamp restent non décodés.
+
+Le diagnostic enregistre désormais :
+- la taille brute du message média ;
+- la position de `NARF` ;
+- la position de `MARF` ;
+- les 160 premiers octets en hexadécimal.
+
+Cette capture permettra d'adapter le parseur à la variante exacte du firmware Gigamedia avant la réassemblage H.265.
