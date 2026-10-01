@@ -25,6 +25,16 @@ La voie expérimentale vise le service EseeCloud/Juan natif observé sur le port
 
 Le code de `src/esee_replay.cpp` est une implémentation propre à GigaPaTChat. Les dépôts ci-dessus servent de références d'interopérabilité et de documentation du comportement observé.
 
+## Remerciements et crédits
+
+Un grand merci aux auteurs dont les travaux publics ont permis d'accélérer cette recherche :
+
+- **BigGecko01** — auteur de `EseeCloud-Raw-Exporter`, pour la documentation du replay EseeCloud, de l'encapsulation NARF/MARF et de la fragmentation des trames ;
+- **meust3** — auteur de `home-assistant-jooan-nvr`, pour l'implémentation et la documentation du transport local KP2P ;
+- **dbuezas** — auteur de `icsee-ptz`, utilisé comme référence complémentaire pour l'écosystème DVRIP/XM/ICSee.
+
+Leurs dépôts restent la source de référence pour leurs travaux respectifs. GigaPaTChat ne prétend pas en être l'auteur et conserve les liens et mentions de licence correspondants.
+
 ## État actuel
 
 Le module expérimental sait :
