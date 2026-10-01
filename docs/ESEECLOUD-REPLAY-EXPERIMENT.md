@@ -308,3 +308,27 @@ REPLAY STOP=2
 Le test s'arrête dès la première trame média détectée. Il n'écrit aucun fichier et n'effectue encore aucun décodage FFmpeg.
 
 Le lecteur WebSocket accepte désormais les longueurs étendues 64 bits (indicateur 127), nécessaires pour les gros fragments H.265 pouvant dépasser 65 535 octets. Les références publiques `BigGecko01/EseeCloud-Raw-Exporter` et `harsh-chalo/trv-log-all-configs/CameraSDK/connector.js` documentent respectivement le transport NARF/MARF et la construction du `REPLAY START`.
+
+
+### Ajustement du diagnostic REPLAY START
+
+Un premier essai matériel a confirmé WebSocket, ARQ/KP2P, IOT_OPEN et AUTH, mais n'a produit ni confirmation REPLAY ni trame média dans le diagnostic initial.
+
+L'analyse du `CameraSDK/connector.js` public montre deux points importants :
+
+1. le client lance toujours `find_file_start_2(...)` avant `replay_start(...)`, sur la même connexion ;
+2. la réponse `APP_PROTO_CMD_REPLAY_RSP` n'est pas utilisée comme confirmation obligatoire du démarrage : les trames média constituent la preuve opérationnelle du replay.
+
+Le diagnostic a donc été corrigé pour reproduire la séquence réelle :
+
+```text
+AUTH
+-> REPLAY SEARCH (40/41, sous-commande 1)
+-> réponse de recherche non vide
+-> pause 300 ms
+-> REPLAY START (40, sous-commande 3)
+-> première trame NARF ou MARF = replay confirmé
+-> REPLAY STOP (sous-commande 2)
+```
+
+Le lecteur WebSocket gère également désormais les PING/PONG, la fragmentation et les longueurs étendues afin de se rapprocher du comportement du WebSocket navigateur utilisé par le SDK JavaScript.
